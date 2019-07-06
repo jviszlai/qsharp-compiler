@@ -157,7 +157,7 @@ namespace Microsoft.Quantum.QsLanguageServer
             var capabilities = new ServerCapabilities
             {
                 TextDocumentSync = new TextDocumentSyncOptions(),
-                CompletionProvider = null,
+                CompletionProvider = new CompletionOptions(),
                 SignatureHelpProvider = new SignatureHelpOptions(),
                 ExecuteCommandProvider = new ExecuteCommandOptions(),
             };
@@ -174,11 +174,7 @@ namespace Microsoft.Quantum.QsLanguageServer
             capabilities.DocumentHighlightProvider = true;
             capabilities.SignatureHelpProvider.TriggerCharacters = new[] { "," };
             capabilities.ExecuteCommandProvider.Commands = new[] { CommandIds.ApplyEdit }; // do not declare internal capabilities 
-            capabilities.CompletionProvider = new CompletionOptions
-            {
-                ResolveProvider = false,
-                TriggerCharacters = Array.Empty<string>()
-            };
+            capabilities.CompletionProvider.TriggerCharacters = new[] { "." };
 
             this.WaitForInit = null;
             return new InitializeResult { Capabilities = capabilities };

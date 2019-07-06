@@ -638,19 +638,19 @@ namespace Microsoft.Quantum.QsCompiler.CompilationBuilder
             if (file == null || compilation == null || position == null || IsDeclaringNewSymbol(file, position))
                 return new CompletionList() { IsIncomplete = false, Items = Array.Empty<CompletionItem>() };
 
-            var keywordCompletions =
+            var namespacePath = GetSymbolNamespacePath(file, position);
+            var openedNamespaces = GetOpenedNamespaces(file, compilation, position);
+            var completions = namespacePath != null
+                ?
+                GetCallableCompletions(file, compilation, new[] { namespacePath })
+                .Concat(GetTypeCompletions(file, compilation, new[] { namespacePath }))
+                :
                 Keywords.ReservedKeywords
-                .Select(keyword => new CompletionItem() { Label = keyword, Kind = CompletionItemKind.Keyword });
-            return new CompletionList()
-            {
-                IsIncomplete = false,
-                Items =
-                    keywordCompletions
-                    .Concat(GetLocalCompletions(file, compilation, position))
-                    .Concat(GetCallableCompletions(file, compilation, position))
-                    .Concat(GetTypeCompletions(file, compilation, position))
-                    .ToArray()
-            };
+                .Select(keyword => new CompletionItem() { Label = keyword, Kind = CompletionItemKind.Keyword })
+                .Concat(GetLocalCompletions(file, compilation, position))
+                .Concat(GetCallableCompletions(file, compilation, openedNamespaces))
+                .Concat(GetTypeCompletions(file, compilation, openedNamespaces));
+            return new CompletionList() { IsIncomplete = false, Items = completions.ToArray() };
         }
 
         /// <summary>
@@ -677,22 +677,21 @@ namespace Microsoft.Quantum.QsCompiler.CompilationBuilder
         }
 
         /// <summary>
-        /// Returns completions for all callables at the given position.
+        /// Returns completions for all callables in any of the given namespaces.
         /// <para/>
         /// Returns an empty enumerator if any parameter is null, the position is invalid, or no completions are
         /// available at the given position.
         /// </summary>
         private static IEnumerable<CompletionItem> GetCallableCompletions(
-            FileContentManager file, CompilationUnit compilation, Position position)
+            FileContentManager file, CompilationUnit compilation, IEnumerable<string> namespaces)
         {
-            if (file == null || compilation == null || position == null)
+            if (file == null || compilation == null || namespaces == null)
                 return Array.Empty<CompletionItem>();
 
-            var openedNamespaces = GetOpenedNamespaces(file, compilation, position);
             return
                 compilation.GlobalSymbols.DefinedCallables()
                 .Concat(compilation.GlobalSymbols.ImportedCallables())
-                .Where(callable => openedNamespaces.Contains(callable.QualifiedName.Namespace.Value))
+                .Where(callable => namespaces.Contains(callable.QualifiedName.Namespace.Value))
                 .Select(callable => new CompletionItem()
                 {
                     Label = callable.QualifiedName.Name.Value,
@@ -702,22 +701,21 @@ namespace Microsoft.Quantum.QsCompiler.CompilationBuilder
         }
 
         /// <summary>
-        /// Returns completions for all types at the given position.
+        /// Returns completions for all types in any of the given namespaces.
         /// <para/>
         /// Returns an empty enumerator if any parameter is null, the position is invalid, or no completions are
         /// available at the given position.
         /// </summary>
         private static IEnumerable<CompletionItem> GetTypeCompletions(
-            FileContentManager file, CompilationUnit compilation, Position position)
+            FileContentManager file, CompilationUnit compilation, IEnumerable<string> namespaces)
         {
-            if (file == null || compilation == null || position == null)
+            if (file == null || compilation == null || namespaces == null)
                 return Array.Empty<CompletionItem>();
 
-            var openedNamespaces = GetOpenedNamespaces(file, compilation, position);
-            return 
+            return
                 compilation.GlobalSymbols.DefinedTypes()
                 .Concat(compilation.GlobalSymbols.ImportedTypes())
-                .Where(type => openedNamespaces.Contains(type.QualifiedName.Namespace.Value))
+                .Where(type => namespaces.Contains(type.QualifiedName.Namespace.Value))
                 .Select(type => new CompletionItem()
                 {
                     Label = type.QualifiedName.Name.Value,
@@ -793,6 +791,37 @@ namespace Microsoft.Quantum.QsCompiler.CompilationBuilder
             {
                 return new[] { @namespace };
             }
+        }
+
+        /// <summary>
+        /// Returns the namespace path for the qualified symbol at the given position, or null if there is no qualified
+        /// symbol.
+        /// </summary>
+        private static string GetSymbolNamespacePath(FileContentManager file, Position position)
+        {
+            var symbolInfo = file.TryGetQsSymbolInfo(position, includeEnd: true, out var fragment);
+            if (symbolInfo.UsedVariables.Count == 1 &&
+                symbolInfo.UsedVariables.Single().Symbol is QsSymbolKind<QsSymbol>.QualifiedSymbol symbol)
+            {
+                return symbol.Item1.Value;
+            }
+            else if (fragment.Kind.IsInvalidFragment)
+            {
+                // Parse the fragment text manually to find a qualified symbol.
+                int relativeLineNum = position.Line - fragment.GetRange().Start.Line;
+                int relativeCharNum =
+                    relativeLineNum == 0
+                    ? position.Character - fragment.GetRange().Start.Character
+                    : position.Character;
+                string line =
+                    fragment.Text.Split(new[] { '\n' }, StringSplitOptions.RemoveEmptyEntries)
+                    .ElementAtOrDefault(relativeLineNum) ?? "";
+                int lastDot = line.LastIndexOf('.');
+                if (lastDot > -1 && lastDot < relativeCharNum)
+                    return line.Substring(0, lastDot).TrimStart();
+            }
+
+            return null;
         }
     }
 }

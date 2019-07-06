@@ -800,12 +800,13 @@ namespace Microsoft.Quantum.QsCompiler.CompilationBuilder
         private static string GetSymbolNamespacePath(FileContentManager file, Position position)
         {
             var symbolInfo = file.TryGetQsSymbolInfo(position, includeEnd: true, out var fragment);
-            if (symbolInfo.UsedVariables.Count == 1 &&
+            if (symbolInfo != null &&
+                symbolInfo.UsedVariables.Count == 1 &&
                 symbolInfo.UsedVariables.Single().Symbol is QsSymbolKind<QsSymbol>.QualifiedSymbol symbol)
             {
                 return symbol.Item1.Value;
             }
-            else if (fragment.Kind.IsInvalidFragment)
+            else if (fragment != null && fragment.Kind.IsInvalidFragment)
             {
                 // Parse the fragment text manually to find a qualified symbol.
                 int relativeLineNum = position.Line - fragment.GetRange().Start.Line;

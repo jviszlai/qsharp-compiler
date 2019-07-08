@@ -851,12 +851,14 @@ namespace Microsoft.Quantum.QsCompiler.CompilationBuilder
                     relativeLineNum == 0
                     ? position.Character - fragment.GetRange().Start.Character
                     : position.Character;
+                // Get the line that the position is in.
                 string line = fragment.Text.Split('\n').ElementAtOrDefault(relativeLineNum) ?? "";
-                int lastDot = line.LastIndexOf('.');
-                if (lastDot > -1 && lastDot < relativeCharNum)
-                    return line.Substring(0, lastDot).TrimStart();
+                // Ignore everything after the position.
+                line = line.Substring(0, Math.Min(relativeCharNum, line.Length));
+                // Return everything before the last dot if there is one.
+                if (line.LastIndexOf('.') != -1)
+                    return line.Substring(0, line.LastIndexOf('.')).TrimStart();
             }
-
             return null;
         }
     }

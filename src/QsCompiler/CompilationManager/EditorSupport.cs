@@ -814,9 +814,7 @@ namespace Microsoft.Quantum.QsCompiler.CompilationBuilder
                     relativeLineNum == 0
                     ? position.Character - fragment.GetRange().Start.Character
                     : position.Character;
-                string line =
-                    fragment.Text.Split(new[] { '\n' }, StringSplitOptions.RemoveEmptyEntries)
-                    .ElementAtOrDefault(relativeLineNum) ?? "";
+                string line = fragment.Text.Split('\n').ElementAtOrDefault(relativeLineNum) ?? "";
                 int lastDot = line.LastIndexOf('.');
                 if (lastDot > -1 && lastDot < relativeCharNum)
                     return line.Substring(0, lastDot).TrimStart();

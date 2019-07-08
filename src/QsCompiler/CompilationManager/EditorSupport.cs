@@ -644,12 +644,14 @@ namespace Microsoft.Quantum.QsCompiler.CompilationBuilder
                 ?
                 GetCallableCompletions(file, compilation, new[] { namespacePath })
                 .Concat(GetTypeCompletions(file, compilation, new[] { namespacePath }))
+                .Concat(GetNamespaceCompletions(compilation, namespacePath))
                 :
                 Keywords.ReservedKeywords
                 .Select(keyword => new CompletionItem() { Label = keyword, Kind = CompletionItemKind.Keyword })
                 .Concat(GetLocalCompletions(file, compilation, position))
                 .Concat(GetCallableCompletions(file, compilation, openedNamespaces))
-                .Concat(GetTypeCompletions(file, compilation, openedNamespaces));
+                .Concat(GetTypeCompletions(file, compilation, openedNamespaces))
+                .Concat(GetNamespaceCompletions(compilation, namespacePath));
             return new CompletionList() { IsIncomplete = false, Items = completions.ToArray() };
         }
 
@@ -721,6 +723,41 @@ namespace Microsoft.Quantum.QsCompiler.CompilationBuilder
                     Label = type.QualifiedName.Name.Value,
                     Kind = CompletionItemKind.Struct
                 });
+        }
+
+        /// <summary>
+        /// Returns completions for all namespaces in the given parent namespace. The completions contain only one
+        /// level of namespaces (that is, the names stop at the first dot after the parent namespace). 
+        /// <para/>
+        /// If the parent namespace is empty or null, returns completions for all root namespaces. If the compilation
+        /// unit is null, returns an empty enumerator.
+        /// </summary>
+        private static IEnumerable<CompletionItem> GetNamespaceCompletions(
+            CompilationUnit compilation, string parentNamespace)
+        {
+            if (compilation == null)
+                return Array.Empty<CompletionItem>();
+            if (parentNamespace == null)
+                parentNamespace = "";
+            if (parentNamespace.Length != 0 && !parentNamespace.EndsWith("."))
+                parentNamespace += ".";
+
+            var typeNames =
+                compilation.GlobalSymbols.DefinedTypes()
+                .Concat(compilation.GlobalSymbols.ImportedTypes())
+                .Select(type => type.QualifiedName);
+            var callableNames =
+                compilation.GlobalSymbols.DefinedCallables()
+                .Concat(compilation.GlobalSymbols.ImportedCallables())
+                .Select(callable => callable.QualifiedName);
+            return
+                typeNames
+                .Concat(callableNames)
+                .Select(qualifiedName => qualifiedName.Namespace.Value)
+                .Where(ns => ns.StartsWith(parentNamespace))
+                .Select(ns => String.Concat(ns.Substring(parentNamespace.Length).TakeWhile(c => c != '.')))
+                .Distinct()
+                .Select(ns => new CompletionItem() { Label = ns, Kind = CompletionItemKind.Module });
         }
 
         /// <summary>

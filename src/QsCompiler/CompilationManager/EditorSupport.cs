@@ -860,8 +860,15 @@ namespace Microsoft.Quantum.QsCompiler.CompilationBuilder
             string[] lines = Utils.SplitLines(fragment.Text);
             int relativeChar =
                 relativeLine == 0 ? position.Character - fragment.GetRange().Start.Character : position.Character;
-            if (relativeLine < 0 || relativeLine >= lines.Length || relativeChar >= lines[relativeLine].Length)
+            if (relativeLine < 0 ||
+                relativeLine >= lines.Length ||
+                relativeChar < 0 ||
+                // Assume includeEnd is true and allow the position to be one character after the last character in the
+                // fragment (so only check strictly greater than).
+                relativeChar > lines[relativeLine].Length)
+            {
                 throw new ArgumentException("position is not contained within the fragment", "position");
+            }
             return lines.Take(relativeLine).Sum(line => line.Length) + relativeChar;
         }
     }

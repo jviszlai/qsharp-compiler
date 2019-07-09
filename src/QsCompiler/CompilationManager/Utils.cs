@@ -52,6 +52,11 @@ namespace Microsoft.Quantum.QsCompiler.CompilationBuilder
         /// </summary>
         internal static readonly Regex ValidAsSymbol = new Regex(@"^[\p{L}_]([\p{L}\p{Nd}_]*)$");
         /// <summary>
+        /// matches qualified symbols before the starting position (right-to-left)
+        /// </summary>
+        internal static readonly Regex QualifiedSymbolRTL =
+            new Regex(@"[\p{L}_][\p{L}\p{Nd}_\.]*", RegexOptions.RightToLeft);
+        /// <summary>
         /// matches a line and its line ending, and a *non-empty* line without line ending at the end
         /// </summary>
         private static readonly Regex EditorLine = new Regex($"({NonBreakingChar}*({LineBreak}))|({NonBreakingChar}+$)");

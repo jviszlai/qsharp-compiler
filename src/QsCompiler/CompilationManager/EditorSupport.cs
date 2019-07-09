@@ -324,12 +324,12 @@ namespace Microsoft.Quantum.QsCompiler.CompilationBuilder
         /// </summary>
         public static WorkspaceEdit Rename(this FileContentManager file, CompilationUnit compilation, Position position, string newName)
         {
-            if (newName == null || file == null) return null; 
+            if (newName == null || file == null) return null;
             var found = file.TryGetReferences(compilation, position, out var declLocation, out var locations);
             if (!found) return null;
             if (declLocation != null) locations = new[] { declLocation }.Concat(locations);
 
-            var changes = locations.ToLookup(loc => loc.Uri, loc => new TextEdit { Range = loc.Range, NewText = newName}); 
+            var changes = locations.ToLookup(loc => loc.Uri, loc => new TextEdit { Range = loc.Range, NewText = newName});
             return new WorkspaceEdit
             {
                 DocumentChanges = changes
@@ -556,7 +556,7 @@ namespace Microsoft.Quantum.QsCompiler.CompilationBuilder
                 var ctlQsName = QsLocalSymbol.NewValidName(NonNullable<string>.New(nrCtlApplications == 0 ? "cs" : $"cs{nrCtlApplications}"));
                 argTuple = SyntaxGenerator.WithControlQubits(argTuple, QsNullable<Tuple<int, int>>.Null, ctlQsName, QsNullable<Tuple<QsPositionInfo, QsPositionInfo>>.Null);
             }
-            
+
             // now that we now what callable is called we need to check which argument should come next
 
             bool BeforePosition(Tuple<QsPositionInfo, QsPositionInfo> symRange) =>
@@ -580,7 +580,7 @@ namespace Microsoft.Quantum.QsCompiler.CompilationBuilder
                 var declItems = decl as QsTuple<LocalVariableDeclaration<QsLocalSymbol>>.QsTuple;
                 var exItems = ex?.Expression as QsExpressionKind<QsExpression, QsSymbol, QsType>.ValueTuple;
                 if (declItems == null) return new[] { Null };
-                if (exItems == null && declItems.Item.Length > 1) return SingleItem(decl.PrintArgumentTuple()); 
+                if (exItems == null && declItems.Item.Length > 1) return SingleItem(decl.PrintArgumentTuple());
 
                 var argItems = exItems != null ? exItems.Item : (ex == null ? ImmutableArray<QsExpression>.Empty : ImmutableArray.Create(ex));
                 return argItems.AddRange(Enumerable.Repeat<QsExpression>(null, declItems.Item.Length - argItems.Length))
@@ -606,7 +606,7 @@ namespace Microsoft.Quantum.QsCompiler.CompilationBuilder
                 if (f.IsAdjoint) signatureLabel = $"{Keywords.qsAdjointFunctor.id} {signatureLabel}";
                 if (f.IsControlled) signatureLabel = $"{Keywords.qsControlledFunctor.id} {signatureLabel}";
             }
-                
+
             var doc = documentation.PrintSummary(format == MarkupKind.Markdown).TrimStart();
             var info = new SignatureInformation
             {
@@ -620,8 +620,8 @@ namespace Microsoft.Quantum.QsCompiler.CompilationBuilder
             return new SignatureHelp
             {
                 Signatures = new[] { info }, // since we don't support overloading there is just one signature here
-                ActiveSignature = 0, 
-                ActiveParameter = precedingArgs.Count() 
+                ActiveSignature = 0,
+                ActiveParameter = precedingArgs.Count()
             };
         }
 
@@ -836,30 +836,33 @@ namespace Microsoft.Quantum.QsCompiler.CompilationBuilder
         /// </summary>
         private static string GetSymbolNamespacePath(FileContentManager file, Position position)
         {
-            var symbolInfo = file.TryGetQsSymbolInfo(position, includeEnd: true, out var fragment);
-            if (symbolInfo != null &&
-                symbolInfo.UsedVariables.Count == 1 &&
-                symbolInfo.UsedVariables.Single().Symbol is QsSymbolKind<QsSymbol>.QualifiedSymbol symbol)
+            var fragment = file.TryGetFragmentAt(position, includeEnd: true);
+            if (fragment != null)
             {
-                return symbol.Item1.Value;
-            }
-            else if (fragment != null && fragment.Kind.IsInvalidFragment)
-            {
-                // Parse the fragment text manually to find a qualified symbol.
-                int relativeLineNum = position.Line - fragment.GetRange().Start.Line;
-                int relativeCharNum =
-                    relativeLineNum == 0
-                    ? position.Character - fragment.GetRange().Start.Character
-                    : position.Character;
-                // Get the line that the position is in.
-                string line = fragment.Text.Split('\n').ElementAtOrDefault(relativeLineNum) ?? "";
-                // Ignore everything after the position.
-                line = line.Substring(0, Math.Min(relativeCharNum, line.Length));
-                // Return everything before the last dot if there is one.
-                if (line.LastIndexOf('.') != -1)
-                    return line.Substring(0, line.LastIndexOf('.')).TrimStart();
+                // Find the qualified symbol at the position, if any.
+                int startAt = GetTextIndexFromPosition(fragment, position);
+                var match = Utils.QualifiedSymbolRTL.Match(fragment.Text, startAt);
+                if (match.Success && match.Index + match.Length == startAt && match.Value.LastIndexOf('.') != -1)
+                    return match.Value.Substring(0, match.Value.LastIndexOf('.'));
             }
             return null;
+        }
+
+        /// <summary>
+        /// Returns the index in the fragment text corresponding to the given absolute position.
+        /// </summary>
+        /// <exception cref="ArgumentException">
+        /// Thrown when the position is not contained within the fragment.
+        /// </exception>
+        private static int GetTextIndexFromPosition(CodeFragment fragment, Position position)
+        {
+            int relativeLine = position.Line - fragment.GetRange().Start.Line;
+            string[] lines = Utils.SplitLines(fragment.Text);
+            int relativeChar =
+                relativeLine == 0 ? position.Character - fragment.GetRange().Start.Character : position.Character;
+            if (relativeLine < 0 || relativeLine >= lines.Length || relativeChar >= lines[relativeLine].Length)
+                throw new ArgumentException("position is not contained within the fragment", "position");
+            return lines.Take(relativeLine).Sum(line => line.Length) + relativeChar;
         }
     }
 }

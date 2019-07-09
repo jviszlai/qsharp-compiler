@@ -56,7 +56,7 @@ namespace Microsoft.Quantum.QsCompiler.CompilationBuilder
         /// symbols that end with a dot
         /// </summary>
         internal static readonly Regex QualifiedSymbolRTL =
-            new Regex(@"[\p{L}_]([\p{L}\p{Nd}_]+\.)*", RegexOptions.RightToLeft);
+            new Regex(@"([\p{L}_][\p{L}\p{Nd}_]*\.?)+", RegexOptions.RightToLeft);
         /// <summary>
         /// matches a line and its line ending, and a *non-empty* line without line ending at the end
         /// </summary>

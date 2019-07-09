@@ -455,13 +455,19 @@ namespace Microsoft.Quantum.QsLanguageServer
         }
 
         [JsonRpcMethod(Methods.TextDocumentCompletionName)]
-        public CompletionList OnTextDocumentCompletion(JToken arg)
+        public async Task<CompletionList> OnTextDocumentCompletionAsync(JToken arg)
         {
+            // Wait for the file manager to finish processing any changes that happened right before this completion
+            // request.
+            await Task.Delay(50);
             try
             {
                 return EditorState.Completions(Utils.TryJTokenAs<TextDocumentPositionParams>(arg));
             }
-            catch { return null; }
+            catch
+            {
+                return null;
+            }
         }
     }
 }

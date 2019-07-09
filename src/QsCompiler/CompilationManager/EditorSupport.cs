@@ -24,6 +24,15 @@ namespace Microsoft.Quantum.QsCompiler.CompilationBuilder
         // utils for getting the necessary information for editor commands
 
         /// <summary>
+        /// The empty completion list.
+        /// </summary>
+        private static readonly CompletionList emptyCompletionList = new CompletionList()
+        {
+            IsIncomplete = false,
+            Items = Array.Empty<CompletionItem>()
+        };
+
+        /// <summary>
         /// Throws an ArgumentNullException if the given offset or relative range is null.
         /// </summary>
         private static Location AsLocation(NonNullable<string> source,
@@ -634,11 +643,19 @@ namespace Microsoft.Quantum.QsCompiler.CompilationBuilder
         public static CompletionList Completions(
             this FileContentManager file, CompilationUnit compilation, Position position)
         {
+            if (file == null || compilation == null || position == null)
+                return emptyCompletionList;
+
             // New symbols shouldn't get any completions for existing symbols.
-            if (file == null || compilation == null || position == null || IsDeclaringNewSymbol(file, position))
-                return new CompletionList() { IsIncomplete = false, Items = Array.Empty<CompletionItem>() };
+            if (IsDeclaringNewSymbol(file, position))
+                return emptyCompletionList;
 
             var namespacePath = GetSymbolNamespacePath(file, position);
+            // If the character at the position is a dot but no valid namespace path precedes it (for example, in a
+            // decimal number), then no completions are valid here.
+            if (namespacePath == null && file.GetLine(position.Line).Text[position.Character - 1] == '.')
+                return emptyCompletionList;
+
             var openedNamespaces = GetOpenedNamespaces(file, compilation, position);
             var completions = namespacePath != null
                 ?

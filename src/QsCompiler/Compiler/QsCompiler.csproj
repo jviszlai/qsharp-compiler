@@ -6,7 +6,7 @@
     <AssemblyName>Microsoft.Quantum.QsCompiler</AssemblyName>
     <AssemblyTitle>Microsoft Q# compiler library.</AssemblyTitle>
   </PropertyGroup>
-  
+
   <ItemGroup>
     <ProjectReference Include="..\CompilationManager\QsCompilationManager.csproj" />
     <ProjectReference Include="..\DocumentationParser\QsDocumentationParser.csproj" />

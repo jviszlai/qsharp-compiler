@@ -715,7 +715,8 @@ namespace Microsoft.Quantum.QsCompiler.CompilationBuilder
                 {
                     Label = callable.QualifiedName.Name.Value,
                     Kind =
-                        callable.Kind.IsTypeConstructor ? CompletionItemKind.Constructor : CompletionItemKind.Function
+                        callable.Kind.IsTypeConstructor ? CompletionItemKind.Constructor : CompletionItemKind.Function,
+                    Detail = callable.QualifiedName.Namespace.Value
                 });
         }
 
@@ -738,7 +739,8 @@ namespace Microsoft.Quantum.QsCompiler.CompilationBuilder
                 .Select(type => new CompletionItem()
                 {
                     Label = type.QualifiedName.Name.Value,
-                    Kind = CompletionItemKind.Struct
+                    Kind = CompletionItemKind.Struct,
+                    Detail = type.QualifiedName.Namespace.Value
                 });
         }
 
@@ -756,8 +758,6 @@ namespace Microsoft.Quantum.QsCompiler.CompilationBuilder
                 return Array.Empty<CompletionItem>();
             if (parentNamespace == null)
                 parentNamespace = "";
-            if (parentNamespace.Length != 0 && !parentNamespace.EndsWith("."))
-                parentNamespace += ".";
 
             var typeNames =
                 compilation.GlobalSymbols.DefinedTypes()
@@ -767,14 +767,20 @@ namespace Microsoft.Quantum.QsCompiler.CompilationBuilder
                 compilation.GlobalSymbols.DefinedCallables()
                 .Concat(compilation.GlobalSymbols.ImportedCallables())
                 .Select(callable => callable.QualifiedName);
+            string prefix = string.IsNullOrEmpty(parentNamespace) ? "" : parentNamespace + ".";
             return
                 typeNames
                 .Concat(callableNames)
                 .Select(qualifiedName => qualifiedName.Namespace.Value)
-                .Where(ns => ns.StartsWith(parentNamespace))
-                .Select(ns => String.Concat(ns.Substring(parentNamespace.Length).TakeWhile(c => c != '.')))
+                .Where(ns => ns.StartsWith(prefix))
+                .Select(ns => String.Concat(ns.Substring(prefix.Length).TakeWhile(c => c != '.')))
                 .Distinct()
-                .Select(ns => new CompletionItem() { Label = ns, Kind = CompletionItemKind.Module });
+                .Select(ns => new CompletionItem()
+                {
+                    Label = ns,
+                    Kind = CompletionItemKind.Module,
+                    Detail = parentNamespace ?? ""
+                });
         }
 
         /// <summary>

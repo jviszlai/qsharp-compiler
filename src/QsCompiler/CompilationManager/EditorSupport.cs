@@ -716,7 +716,12 @@ namespace Microsoft.Quantum.QsCompiler.CompilationBuilder
                     Label = callable.QualifiedName.Name.Value,
                     Kind =
                         callable.Kind.IsTypeConstructor ? CompletionItemKind.Constructor : CompletionItemKind.Function,
-                    Detail = callable.QualifiedName.Namespace.Value
+                    Detail = callable.QualifiedName.Namespace.Value,
+                    Documentation = new MarkupContent()
+                    {
+                        Kind = MarkupKind.Markdown,
+                        Value = callable.PrintSignature() + callable.Documentation.PrintSummary(true)
+                    }
                 });
         }
 
@@ -740,7 +745,12 @@ namespace Microsoft.Quantum.QsCompiler.CompilationBuilder
                 {
                     Label = type.QualifiedName.Name.Value,
                     Kind = CompletionItemKind.Struct,
-                    Detail = type.QualifiedName.Namespace.Value
+                    Detail = type.QualifiedName.Namespace.Value,
+                    Documentation = new MarkupContent()
+                    {
+                        Kind = MarkupKind.Markdown,
+                        Value = type.Documentation.PrintSummary(true)
+                    }
                 });
         }
 

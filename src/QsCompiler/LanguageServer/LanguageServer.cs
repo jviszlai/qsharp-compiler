@@ -462,7 +462,9 @@ namespace Microsoft.Quantum.QsLanguageServer
             await Task.Delay(50);
             try
             {
-                return EditorState.Completions(Utils.TryJTokenAs<TextDocumentPositionParams>(arg));
+                var format = ChooseFormat(
+                    this.ClientCapabilities?.TextDocument?.SignatureHelp?.SignatureInformation?.DocumentationFormat);
+                return EditorState.Completions(Utils.TryJTokenAs<TextDocumentPositionParams>(arg), format);
             }
             catch
             {

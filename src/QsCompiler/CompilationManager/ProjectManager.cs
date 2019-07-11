@@ -908,9 +908,11 @@ namespace Microsoft.Quantum.QsCompiler.CompilationBuilder
         /// without logging anything if an exception occurs upon evaluating the query (occasional failures are to be
         /// expected as the evaluation is a readonly query running in parallel to the ongoing processing).
         /// </summary>
-        public CompletionList Completions(TextDocumentPositionParams param) =>
-            this.Manager(param?.TextDocument?.Uri)?.FileQuery
-                (param?.TextDocument, (file, c) => file.Completions(c, param?.Position), suppressExceptionLogging: true);
+        public CompletionList Completions(TextDocumentPositionParams param, MarkupKind format) =>
+            this.Manager(param?.TextDocument?.Uri)?.FileQuery(
+                param?.TextDocument,
+                (file, compilation) => file.Completions(compilation, param?.Position, format),
+                suppressExceptionLogging: true);
 
 
         // routines related to querying the state of the project manager

@@ -638,6 +638,10 @@ namespace Microsoft.Quantum.QsCompiler.CompilationBuilder
             if (file == null || compilation == null || position == null || IsDeclaringNewSymbol(file, position))
                 return new CompletionList() { IsIncomplete = false, Items = Array.Empty<CompletionItem>() };
 
+            // TODO: Show only syntactically valid completions depending on the position in the source code. For
+            // example, at the beginning of a statement, only function names (for functions that return Unit), operation
+            // names (for operations that return Unit, and if the position is in another operation), and certain
+            // keywords are allowed.
             var keywordCompletions =
                 Keywords.ReservedKeywords
                 .Select(keyword => new CompletionItem() { Label = keyword, Kind = CompletionItemKind.Keyword });

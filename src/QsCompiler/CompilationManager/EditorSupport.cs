@@ -656,7 +656,11 @@ namespace Microsoft.Quantum.QsCompiler.CompilationBuilder
             if (namespacePath == null && file.GetLine(position.Line).Text[position.Character - 1] == '.')
                 return emptyCompletionList;
 
-            var openedNamespaces = GetOpenedNamespaces(file, compilation, position);
+            // TODO: Show only syntactically valid completions depending on the position in the source code. For
+            // example, at the beginning of a statement, only function names (for functions that return Unit), operation
+            // names (for operations that return Unit, and if the position is in another operation), and certain
+            // keywords are allowed.
+            var unqualifiedNamespaces = GetUnqualifiedNamespaces(file, compilation, position);
             var completions = namespacePath != null
                 ?
                 GetCallableCompletions(file, compilation, new[] { namespacePath })
@@ -666,8 +670,8 @@ namespace Microsoft.Quantum.QsCompiler.CompilationBuilder
                 Keywords.ReservedKeywords
                 .Select(keyword => new CompletionItem() { Label = keyword, Kind = CompletionItemKind.Keyword })
                 .Concat(GetLocalCompletions(file, compilation, position))
-                .Concat(GetCallableCompletions(file, compilation, openedNamespaces))
-                .Concat(GetTypeCompletions(file, compilation, openedNamespaces))
+                .Concat(GetCallableCompletions(file, compilation, unqualifiedNamespaces))
+                .Concat(GetTypeCompletions(file, compilation, unqualifiedNamespaces))
                 .Concat(GetNamespaceCompletions(compilation, namespacePath));
             return new CompletionList() { IsIncomplete = false, Items = completions.ToArray() };
         }
@@ -820,12 +824,12 @@ namespace Microsoft.Quantum.QsCompiler.CompilationBuilder
         }
 
         /// <summary>
-        /// Returns the names of all namespaces that have been opened at the given position in the file, including the
-        /// current namespace.
+        /// Returns the names of all namespaces whose members can be referenced without a qualified symbol at the given
+        /// position in the file.
         /// <para/>
         /// Returns an empty or incomplete list of namespaces if any parameter is null or the position is invalid.
         /// </summary>
-        private static IEnumerable<string> GetOpenedNamespaces(
+        private static IEnumerable<string> GetUnqualifiedNamespaces(
             FileContentManager file, CompilationUnit compilation, Position position)
         {
             string @namespace = file.TryGetNamespaceAt(position);
@@ -836,10 +840,12 @@ namespace Microsoft.Quantum.QsCompiler.CompilationBuilder
 
             try
             {
-                var openedNamespaces = compilation
+                return
+                    compilation
                     .GetOpenDirectives(NonNullable<string>.New(@namespace))[file.FileName]
-                    .Select(item => item.Item1.Value);
-                return openedNamespaces.Concat(new[] { @namespace });
+                    .Where(open => open.Item2 == null)  // Only include open directives without a short name.
+                    .Select(open => open.Item1.Value)
+                    .Concat(new[] { @namespace });
             }
             catch (ArgumentException)
             {

@@ -638,7 +638,39 @@ namespace Microsoft.Quantum.QsCompiler.CompilationBuilder
             if (file == null || compilation == null || position == null || IsDeclaringNewSymbol(file, position))
                 return new CompletionList() { IsIncomplete = false, Items = Array.Empty<CompletionItem>() };
 
-            var locals = compilation
+            // TODO: Show only syntactically valid completions depending on the position in the source code. For
+            // example, at the beginning of a statement, only function names (for functions that return Unit), operation
+            // names (for operations that return Unit, and if the position is in another operation), and certain
+            // keywords are allowed.
+            var keywordCompletions =
+                Keywords.ReservedKeywords
+                .Select(keyword => new CompletionItem() { Label = keyword, Kind = CompletionItemKind.Keyword });
+            return new CompletionList()
+            {
+                IsIncomplete = false,
+                Items =
+                    keywordCompletions
+                    .Concat(GetLocalCompletions(file, compilation, position))
+                    .Concat(GetCallableCompletions(file, compilation, position))
+                    .Concat(GetTypeCompletions(file, compilation, position))
+                    .ToArray()
+            };
+        }
+
+        /// <summary>
+        /// Returns completions for local variables at the given position.
+        /// <para/>
+        /// Returns an empty enumerator if any parameter is null, the position is invalid, or no completions are
+        /// available at the given position.
+        /// </summary>
+        private static IEnumerable<CompletionItem> GetLocalCompletions(
+            FileContentManager file, CompilationUnit compilation, Position position)
+        {
+            if (file == null || compilation == null || position == null)
+                return Array.Empty<CompletionItem>();
+
+            return
+                compilation
                 .TryGetLocalDeclarations(file, position, out var _)
                 .Variables
                 .Select(variable => new CompletionItem()
@@ -646,7 +678,55 @@ namespace Microsoft.Quantum.QsCompiler.CompilationBuilder
                     Label = variable.VariableName.Value,
                     Kind = CompletionItemKind.Variable
                 });
-            return new CompletionList() { IsIncomplete = false, Items = locals.ToArray() };
+        }
+
+        /// <summary>
+        /// Returns completions for all callables at the given position.
+        /// <para/>
+        /// Returns an empty enumerator if any parameter is null, the position is invalid, or no completions are
+        /// available at the given position.
+        /// </summary>
+        private static IEnumerable<CompletionItem> GetCallableCompletions(
+            FileContentManager file, CompilationUnit compilation, Position position)
+        {
+            if (file == null || compilation == null || position == null)
+                return Array.Empty<CompletionItem>();
+
+            var unqualifiedNamespaces = GetUnqualifiedNamespaces(file, compilation, position);
+            return
+                compilation.GlobalSymbols.DefinedCallables()
+                .Concat(compilation.GlobalSymbols.ImportedCallables())
+                .Where(callable => unqualifiedNamespaces.Contains(callable.QualifiedName.Namespace.Value))
+                .Select(callable => new CompletionItem()
+                {
+                    Label = callable.QualifiedName.Name.Value,
+                    Kind =
+                        callable.Kind.IsTypeConstructor ? CompletionItemKind.Constructor : CompletionItemKind.Function
+                });
+        }
+
+        /// <summary>
+        /// Returns completions for all types at the given position.
+        /// <para/>
+        /// Returns an empty enumerator if any parameter is null, the position is invalid, or no completions are
+        /// available at the given position.
+        /// </summary>
+        private static IEnumerable<CompletionItem> GetTypeCompletions(
+            FileContentManager file, CompilationUnit compilation, Position position)
+        {
+            if (file == null || compilation == null || position == null)
+                return Array.Empty<CompletionItem>();
+
+            var unqualifiedNamespaces = GetUnqualifiedNamespaces(file, compilation, position);
+            return 
+                compilation.GlobalSymbols.DefinedTypes()
+                .Concat(compilation.GlobalSymbols.ImportedTypes())
+                .Where(type => unqualifiedNamespaces.Contains(type.QualifiedName.Namespace.Value))
+                .Select(type => new CompletionItem()
+                {
+                    Label = type.QualifiedName.Name.Value,
+                    Kind = CompletionItemKind.Struct
+                });
         }
 
         /// <summary>
@@ -688,6 +768,36 @@ namespace Microsoft.Quantum.QsCompiler.CompilationBuilder
                     return PositionIsWithinSymbol(nd.Item);
                 default:
                     return false;
+            }
+        }
+
+        /// <summary>
+        /// Returns the names of all namespaces whose members can be referenced without a qualified symbol at the given
+        /// position in the file.
+        /// <para/>
+        /// Returns an empty or incomplete list of namespaces if any parameter is null or the position is invalid.
+        /// </summary>
+        private static IEnumerable<string> GetUnqualifiedNamespaces(
+            FileContentManager file, CompilationUnit compilation, Position position)
+        {
+            string @namespace = file.TryGetNamespaceAt(position);
+            if (@namespace == null)
+                return Array.Empty<string>();
+            if (compilation == null)
+                return new[] { @namespace };
+
+            try
+            {
+                return
+                    compilation
+                    .GetOpenDirectives(NonNullable<string>.New(@namespace))[file.FileName]
+                    .Where(open => open.Item2 == null)  // Only include open directives without a short name.
+                    .Select(open => open.Item1.Value)
+                    .Concat(new[] { @namespace });
+            }
+            catch (ArgumentException)
+            {
+                return new[] { @namespace };
             }
         }
     }

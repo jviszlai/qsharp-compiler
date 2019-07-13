@@ -764,6 +764,8 @@ namespace Microsoft.Quantum.QsCompiler.CompilationBuilder
                     return PositionIsWithinSymbol(mb.Item1);
                 case QsFragmentKind.ImmutableBinding ib:
                     return PositionIsWithinSymbol(ib.Item1);
+                case QsFragmentKind.OpenDirective od:
+                    return od.Item2.IsValue && PositionIsWithinSymbol(od.Item2.Item);
                 case QsFragmentKind.NamespaceDeclaration nd:
                     return PositionIsWithinSymbol(nd.Item);
                 default:

@@ -5,6 +5,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
+using System.Runtime.Serialization;
 using Microsoft.Quantum.QsCompiler.CompilationBuilder.DataStructures;
 using Microsoft.Quantum.QsCompiler.DataTypes;
 using Microsoft.Quantum.QsCompiler.Diagnostics;
@@ -641,7 +642,7 @@ namespace Microsoft.Quantum.QsCompiler.CompilationBuilder
         /// available at the given position.
         /// </summary>
         public static CompletionList Completions(
-            this FileContentManager file, CompilationUnit compilation, Position position, MarkupKind format)
+            this FileContentManager file, CompilationUnit compilation, Position position)
         {
             if (file == null || compilation == null || position == null)
                 return emptyCompletionList;
@@ -659,17 +660,35 @@ namespace Microsoft.Quantum.QsCompiler.CompilationBuilder
             var openedNamespaces = GetOpenedNamespaces(file, compilation, position);
             var completions = namespacePath != null
                 ?
-                GetCallableCompletions(file, compilation, new[] { namespacePath }, format)
-                .Concat(GetTypeCompletions(file, compilation, new[] { namespacePath }, format))
+                GetCallableCompletions(file, compilation, new[] { namespacePath })
+                .Concat(GetTypeCompletions(file, compilation, new[] { namespacePath }))
                 .Concat(GetNamespaceCompletions(compilation, namespacePath))
                 :
                 Keywords.ReservedKeywords
                 .Select(keyword => new CompletionItem() { Label = keyword, Kind = CompletionItemKind.Keyword })
                 .Concat(GetLocalCompletions(file, compilation, position))
-                .Concat(GetCallableCompletions(file, compilation, openedNamespaces, format))
-                .Concat(GetTypeCompletions(file, compilation, openedNamespaces, format))
+                .Concat(GetCallableCompletions(file, compilation, openedNamespaces))
+                .Concat(GetTypeCompletions(file, compilation, openedNamespaces))
                 .Concat(GetNamespaceCompletions(compilation, namespacePath));
             return new CompletionList() { IsIncomplete = false, Items = completions.ToArray() };
+        }
+
+        /// <summary>
+        /// Resolves additional information for the given completion item. The item may be mutated.
+        /// <para/>
+        /// Returns the same completion item that was given, possibly with changes. If any parameter is null, the item
+        /// is not changed.
+        /// </summary>
+        public static CompletionItem ResolveCompletion(
+            this CompilationUnit compilation, CompletionItem item, CompletionItemData data, MarkupKind format)
+        {
+            if (item == null)
+                return null;
+            var documentation = TryGetDocumentation(
+                compilation, data?.QualifiedName, item.Kind, format == MarkupKind.Markdown);
+            if (documentation != null)
+                item.Documentation = new MarkupContent() { Kind = format, Value = documentation };
+            return item;
         }
 
         /// <summary>
@@ -702,7 +721,7 @@ namespace Microsoft.Quantum.QsCompiler.CompilationBuilder
         /// available at the given position.
         /// </summary>
         private static IEnumerable<CompletionItem> GetCallableCompletions(
-            FileContentManager file, CompilationUnit compilation, IEnumerable<string> namespaces, MarkupKind format)
+            FileContentManager file, CompilationUnit compilation, IEnumerable<string> namespaces)
         {
             if (file == null || compilation == null || namespaces == null)
                 return Array.Empty<CompletionItem>();
@@ -717,10 +736,10 @@ namespace Microsoft.Quantum.QsCompiler.CompilationBuilder
                     Kind =
                         callable.Kind.IsTypeConstructor ? CompletionItemKind.Constructor : CompletionItemKind.Function,
                     Detail = callable.QualifiedName.Namespace.Value,
-                    Documentation = new MarkupContent()
+                    Data = new CompletionItemData()
                     {
-                        Kind = format,
-                        Value = callable.PrintSignature() + callable.Documentation.PrintSummary(true)
+                        Source = new TextDocumentIdentifier() { Uri = file.Uri },
+                        QualifiedName = callable.QualifiedName
                     }
                 });
         }
@@ -732,7 +751,7 @@ namespace Microsoft.Quantum.QsCompiler.CompilationBuilder
         /// available at the given position.
         /// </summary>
         private static IEnumerable<CompletionItem> GetTypeCompletions(
-            FileContentManager file, CompilationUnit compilation, IEnumerable<string> namespaces, MarkupKind format)
+            FileContentManager file, CompilationUnit compilation, IEnumerable<string> namespaces)
         {
             if (file == null || compilation == null || namespaces == null)
                 return Array.Empty<CompletionItem>();
@@ -746,10 +765,10 @@ namespace Microsoft.Quantum.QsCompiler.CompilationBuilder
                     Label = type.QualifiedName.Name.Value,
                     Kind = CompletionItemKind.Struct,
                     Detail = type.QualifiedName.Namespace.Value,
-                    Documentation = new MarkupContent()
+                    Data = new CompletionItemData()
                     {
-                        Kind = format,
-                        Value = type.Documentation.PrintSummary(true)
+                        Source = new TextDocumentIdentifier() { Uri = file.Uri },
+                        QualifiedName = type.QualifiedName
                     }
                 });
         }
@@ -791,6 +810,38 @@ namespace Microsoft.Quantum.QsCompiler.CompilationBuilder
                     Kind = CompletionItemKind.Module,
                     Detail = parentNamespace ?? ""
                 });
+        }
+
+        /// <summary>
+        /// Returns documentation for the callable (if kind is Function or Constructor) or type (if kind is Struct) in
+        /// the compilation unit with the given qualified name, or null if no documentation is available.
+        /// <para/>
+        /// Returns null if the compilation unit is null or the kind is invalid.
+        /// </summary>
+        private static string TryGetDocumentation(
+            CompilationUnit compilation, QsQualifiedName name, CompletionItemKind kind, bool useMarkdown)
+        {
+            switch (kind)
+            {
+                case CompletionItemKind.Function:
+                case CompletionItemKind.Constructor:
+                    var callable =
+                        compilation?.GlobalSymbols.TryGetCallable(
+                            name, NonNullable<string>.New(""), NonNullable<string>.New(""))
+                        .Item;
+                    return
+                        callable == null
+                        ? null
+                        : callable.PrintSignature() + callable.Documentation.PrintSummary(useMarkdown);
+                case CompletionItemKind.Struct:
+                    var type =
+                        compilation?.GlobalSymbols.TryGetType(
+                            name, NonNullable<string>.New(""), NonNullable<string>.New(""))
+                        .Item;
+                    return type?.Documentation.PrintSummary(useMarkdown);
+                default:
+                    return null;
+            }
         }
 
         /// <summary>
@@ -903,6 +954,38 @@ namespace Microsoft.Quantum.QsCompiler.CompilationBuilder
                 throw new ArgumentException("position is not contained within the fragment", "position");
             }
             return lines.Take(relativeLine).Sum(line => line.Length) + relativeChar;
+        }
+    }
+
+    /// <summary>
+    /// Data associated with a completion item that is used for resolving additional information.
+    /// </summary>
+    [DataContract]
+    public class CompletionItemData
+    {
+        [DataMember(Name = "namespace")]
+        private string @namespace;
+
+        [DataMember(Name = "name")]
+        private string name;
+
+        /// <summary>
+        /// The text document that the original completion request was made from.
+        /// </summary>
+        [DataMember(Name = "source")]
+        public TextDocumentIdentifier Source { get; set; }
+
+        /// <summary>
+        /// The qualified name of the completion item.
+        /// </summary>
+        public QsQualifiedName QualifiedName
+        {
+            get => new QsQualifiedName(NonNullable<string>.New(@namespace), NonNullable<string>.New(name));
+            set
+            {
+                @namespace = value.Namespace.Value;
+                name = value.Name.Value;
+            }
         }
     }
 }

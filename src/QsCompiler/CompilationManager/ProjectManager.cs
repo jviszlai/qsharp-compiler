@@ -908,10 +908,26 @@ namespace Microsoft.Quantum.QsCompiler.CompilationBuilder
         /// without logging anything if an exception occurs upon evaluating the query (occasional failures are to be
         /// expected as the evaluation is a readonly query running in parallel to the ongoing processing).
         /// </summary>
-        public CompletionList Completions(TextDocumentPositionParams param, MarkupKind format) =>
+        public CompletionList Completions(TextDocumentPositionParams param) =>
             this.Manager(param?.TextDocument?.Uri)?.FileQuery(
                 param?.TextDocument,
-                (file, compilation) => file.Completions(compilation, param?.Position, format),
+                (file, compilation) => file.Completions(compilation, param?.Position),
+                suppressExceptionLogging: true);
+
+        /// <summary>
+        /// Resolves additional information for the given completion item.
+        /// <para/>
+        /// Returns null if the completion item data is null, the file URI given in the data is null, or if the file is
+        /// not a source file.
+        /// <para/>
+        /// Fails silently without logging anything if an exception occurs upon evaluating the query (occasional
+        /// failures are to be expected as the evaluation is a read-only query running in parallel to the ongoing
+        /// processing).
+        /// </summary>
+        public CompletionItem ResolveCompletion(CompletionItem item, CompletionItemData data, MarkupKind format) =>
+            this.Manager(data?.Source?.Uri)?.FileQuery(
+                data.Source,
+                (_, compilation) => compilation.ResolveCompletion(item, data, format),
                 suppressExceptionLogging: true);
 
 

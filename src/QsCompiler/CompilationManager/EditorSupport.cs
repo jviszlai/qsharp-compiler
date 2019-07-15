@@ -665,14 +665,15 @@ namespace Microsoft.Quantum.QsCompiler.CompilationBuilder
                 ?
                 GetCallableCompletions(file, compilation, new[] { namespacePath })
                 .Concat(GetTypeCompletions(file, compilation, new[] { namespacePath }))
-                .Concat(GetNamespaceCompletions(compilation, namespacePath))
+                .Concat(GetGlobalNamespaceCompletions(compilation, namespacePath))
                 :
                 Keywords.ReservedKeywords
                 .Select(keyword => new CompletionItem() { Label = keyword, Kind = CompletionItemKind.Keyword })
                 .Concat(GetLocalCompletions(file, compilation, position))
                 .Concat(GetCallableCompletions(file, compilation, unqualifiedNamespaces))
                 .Concat(GetTypeCompletions(file, compilation, unqualifiedNamespaces))
-                .Concat(GetNamespaceCompletions(compilation, namespacePath));
+                .Concat(GetGlobalNamespaceCompletions(compilation, namespacePath))
+                .Concat(GetNamespaceAliasCompletions(file, compilation, position));
             return new CompletionList() { IsIncomplete = false, Items = completions.ToArray() };
         }
 
@@ -747,13 +748,13 @@ namespace Microsoft.Quantum.QsCompiler.CompilationBuilder
         }
 
         /// <summary>
-        /// Returns completions for all namespaces in the given parent namespace. The completions contain only one
-        /// level of namespaces (that is, the names stop at the first dot after the parent namespace). 
+        /// Returns completions for all global namespaces in the given parent namespace. The completions contain only
+        /// one level of namespaces (that is, the names stop at the first dot after the parent namespace). 
         /// <para/>
         /// If the parent namespace is empty or null, returns completions for all root namespaces. If the compilation
         /// unit is null, returns an empty enumerator.
         /// </summary>
-        private static IEnumerable<CompletionItem> GetNamespaceCompletions(
+        private static IEnumerable<CompletionItem> GetGlobalNamespaceCompletions(
             CompilationUnit compilation, string parentNamespace)
         {
             if (compilation == null)
@@ -779,6 +780,24 @@ namespace Microsoft.Quantum.QsCompiler.CompilationBuilder
                 .Select(ns => String.Concat(ns.Substring(parentNamespace.Length).TakeWhile(c => c != '.')))
                 .Distinct()
                 .Select(ns => new CompletionItem() { Label = ns, Kind = CompletionItemKind.Module });
+        }
+
+        /// <summary>
+        /// Returns completions for namespace aliases that are visible at the given position in the file.
+        /// <para/>
+        /// If any parameter is null or invalid, returns an empty enumerator.
+        /// </summary>
+        private static IEnumerable<CompletionItem> GetNamespaceAliasCompletions(
+            FileContentManager file, CompilationUnit compilation, Position position)
+        {
+            string @namespace = file.TryGetNamespaceAt(position);
+            if (@namespace == null || compilation == null)
+                return Array.Empty<CompletionItem>();
+            return
+                compilation
+                .GetOpenDirectives(NonNullable<string>.New(@namespace))[file.FileName]
+                .Where(open => open.Item2 != null)
+                .Select(open => new CompletionItem() { Label = open.Item2, Kind = CompletionItemKind.Module });
         }
 
         /// <summary>
@@ -845,7 +864,7 @@ namespace Microsoft.Quantum.QsCompiler.CompilationBuilder
                 return
                     compilation
                     .GetOpenDirectives(NonNullable<string>.New(@namespace))[file.FileName]
-                    .Where(open => open.Item2 == null)  // Only include open directives without a short name.
+                    .Where(open => open.Item2 == null)  // Only include open directives without an alias.
                     .Select(open => open.Item1.Value)
                     .Concat(new[] { @namespace });
             }

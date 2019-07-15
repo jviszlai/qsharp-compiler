@@ -868,7 +868,12 @@ namespace Microsoft.Quantum.QsCompiler.CompilationBuilder
                 compilation
                 .GetOpenDirectives(NonNullable<string>.New(@namespace))[file.FileName]
                 .Where(open => open.Item2 != null)
-                .Select(open => new CompletionItem() { Label = open.Item2, Kind = CompletionItemKind.Module });
+                .Select(open => new CompletionItem()
+                {
+                    Label = open.Item2,
+                    Kind = CompletionItemKind.Module,
+                    Detail = open.Item1.Value
+                });
         }
 
         /// <summary>

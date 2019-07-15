@@ -5,9 +5,11 @@ using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
+using Microsoft.FSharp.Core;
 using Microsoft.Quantum.QsCompiler.CompilationBuilder.DataStructures;
 using Microsoft.Quantum.QsCompiler.DataTypes;
 using Microsoft.Quantum.QsCompiler.Diagnostics;
+using Microsoft.Quantum.QsCompiler.SymbolManagement;
 using Microsoft.Quantum.QsCompiler.SyntaxProcessing;
 using Microsoft.Quantum.QsCompiler.SyntaxTokens;
 using Microsoft.Quantum.QsCompiler.SyntaxTree;
@@ -927,15 +929,12 @@ namespace Microsoft.Quantum.QsCompiler.CompilationBuilder
         private static string ResolveNamespaceAlias(
             FileContentManager file, CompilationUnit compilation, Position position, string alias)
         {
-            string @namespace = file.TryGetNamespaceAt(position);
-            if (@namespace == null || compilation == null)
+            string nsName = file.TryGetNamespaceAt(position);
+            if (nsName == null || compilation == null || alias == null)
                 return alias;
-            return
-                compilation
-                .GetOpenDirectives(NonNullable<string>.New(@namespace))[file.FileName]
-                .Where(open => open.Item2 != null && open.Item2 == alias)
-                .Select(open => open.Item1.Value)
-                .FirstOrDefault() ?? alias;
+            var ns = compilation.GlobalSymbols.TryResolveQualifier(
+                NonNullable<string>.New(alias), NonNullable<string>.New(nsName), file.FileName);
+            return FSharpOption<Namespace>.get_IsSome(ns) ? ns.Value.Name.Value : alias;
         }
     }
 }

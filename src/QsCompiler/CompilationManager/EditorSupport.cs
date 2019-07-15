@@ -650,7 +650,9 @@ namespace Microsoft.Quantum.QsCompiler.CompilationBuilder
             if (IsDeclaringNewSymbol(file, position))
                 return emptyCompletionList;
 
-            var namespacePath = GetSymbolNamespacePath(file, position);
+            var namespacePath =
+                ResolveNamespaceAlias(file, compilation, position, GetSymbolNamespacePath(file, position));
+
             // If the character at the position is a dot but no valid namespace path precedes it (for example, in a
             // decimal number), then no completions are valid here.
             if (namespacePath == null && file.GetLine(position.Line).Text[position.Character - 1] == '.')
@@ -914,6 +916,26 @@ namespace Microsoft.Quantum.QsCompiler.CompilationBuilder
                 throw new ArgumentException("position is not contained within the fragment", "position");
             }
             return lines.Take(relativeLine).Sum(line => line.Length) + relativeChar;
+        }
+
+        /// <summary>
+        /// Resolves the namespace alias and returns its full namespace name. If the alias couldn't be resolved, returns
+        /// the alias unchanged.
+        /// <para/>
+        /// Returns the alias unchanged if any parameter is null.
+        /// </summary>
+        private static string ResolveNamespaceAlias(
+            FileContentManager file, CompilationUnit compilation, Position position, string alias)
+        {
+            string @namespace = file.TryGetNamespaceAt(position);
+            if (@namespace == null || compilation == null)
+                return alias;
+            return
+                compilation
+                .GetOpenDirectives(NonNullable<string>.New(@namespace))[file.FileName]
+                .Where(open => open.Item2 != null && open.Item2 == alias)
+                .Select(open => open.Item1.Value)
+                .FirstOrDefault() ?? alias;
         }
     }
 }

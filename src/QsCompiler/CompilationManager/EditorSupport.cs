@@ -5,11 +5,9 @@ using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
-using Microsoft.FSharp.Core;
 using Microsoft.Quantum.QsCompiler.CompilationBuilder.DataStructures;
 using Microsoft.Quantum.QsCompiler.DataTypes;
 using Microsoft.Quantum.QsCompiler.Diagnostics;
-using Microsoft.Quantum.QsCompiler.SymbolManagement;
 using Microsoft.Quantum.QsCompiler.SyntaxProcessing;
 using Microsoft.Quantum.QsCompiler.SyntaxTokens;
 using Microsoft.Quantum.QsCompiler.SyntaxTree;
@@ -937,7 +935,7 @@ namespace Microsoft.Quantum.QsCompiler.CompilationBuilder
                 return alias;
             var ns = compilation.GlobalSymbols.TryResolveQualifier(
                 NonNullable<string>.New(alias), NonNullable<string>.New(nsName), file.FileName);
-            return FSharpOption<Namespace>.get_IsSome(ns) ? ns.Value.Name.Value : alias;
+            return ns.IsValue ? ns.Item.Name.Value : alias;
         }
     }
 }

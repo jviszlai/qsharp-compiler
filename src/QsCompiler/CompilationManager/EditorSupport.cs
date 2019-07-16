@@ -676,7 +676,7 @@ namespace Microsoft.Quantum.QsCompiler.CompilationBuilder
                 .Concat(GetLocalCompletions(file, compilation, position))
                 .Concat(GetCallableCompletions(file, compilation, unqualifiedNamespaces))
                 .Concat(GetTypeCompletions(file, compilation, unqualifiedNamespaces))
-                .Concat(GetGlobalNamespaceCompletions(compilation, namespacePath))
+                .Concat(GetGlobalNamespaceCompletions(compilation, namespacePath ?? ""))
                 .Concat(GetNamespaceAliasCompletions(file, compilation, position));
             return new CompletionList() { IsIncomplete = false, Items = completions.ToArray() };
         }
@@ -752,21 +752,21 @@ namespace Microsoft.Quantum.QsCompiler.CompilationBuilder
         }
 
         /// <summary>
-        /// Returns completions for all global namespaces in the given parent namespace. The completions contain only
-        /// one level of namespaces (that is, the names stop at the first dot after the parent namespace). 
+        /// Returns completions for all global namespaces with the given prefix. The completion names contain only the
+        /// word after the prefix and before the next dot.
         /// <para/>
-        /// If the parent namespace is empty or null, returns completions for all root namespaces. If the compilation
-        /// unit is null, returns an empty enumerator.
+        /// Note: a dot will be added after the given prefix if it is not the empty string, and doesn't already end with
+        /// a dot.
+        /// <para/>
+        /// Returns null if any argument is null.
         /// </summary>
         private static IEnumerable<CompletionItem> GetGlobalNamespaceCompletions(
-            CompilationUnit compilation, string parentNamespace)
+            CompilationUnit compilation, string prefix)
         {
-            if (compilation == null)
-                return Array.Empty<CompletionItem>();
-            if (parentNamespace == null)
-                parentNamespace = "";
-            if (parentNamespace.Length != 0 && !parentNamespace.EndsWith("."))
-                parentNamespace += ".";
+            if (compilation == null || prefix == null)
+                return null;
+            if (prefix.Length != 0 && !prefix.EndsWith("."))
+                prefix += ".";
 
             var typeNames =
                 compilation.GlobalSymbols.DefinedTypes()
@@ -780,8 +780,8 @@ namespace Microsoft.Quantum.QsCompiler.CompilationBuilder
                 typeNames
                 .Concat(callableNames)
                 .Select(qualifiedName => qualifiedName.Namespace.Value)
-                .Where(ns => ns.StartsWith(parentNamespace))
-                .Select(ns => String.Concat(ns.Substring(parentNamespace.Length).TakeWhile(c => c != '.')))
+                .Where(ns => ns.StartsWith(prefix))
+                .Select(ns => String.Concat(ns.Substring(prefix.Length).TakeWhile(c => c != '.')))
                 .Distinct()
                 .Select(ns => new CompletionItem() { Label = ns, Kind = CompletionItemKind.Module });
         }

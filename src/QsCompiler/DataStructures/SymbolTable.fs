@@ -605,14 +605,14 @@ and NamespaceManager
     member this.TryResolveQualifier qualifier (nsName, source) = 
         syncRoot.EnterReadLock()
         try match Namespaces.TryGetValue qualifier with
-        | false, _ -> Namespaces.TryGetValue nsName |> function // check if qualifier is a namespace short name
-            | true, parentNS -> (parentNS.NamespaceShortNames source).TryGetValue qualifier |> function
-                | true, unabbreviated -> Namespaces.TryGetValue unabbreviated |> function
-                    | false, _ -> QsCompilerError.Raise "the corresponding namespace for a namespace short name could not be found"; Null
-                    | true, ns -> Value ns
-                | false, _ -> Null
-            | false, _ -> ArgumentException "no namespace with the given name exists" |> raise
-        | true, ns -> Value ns
+            | false, _ -> Namespaces.TryGetValue nsName |> function // check if qualifier is a namespace short name
+                | true, parentNS -> (parentNS.NamespaceShortNames source).TryGetValue qualifier |> function
+                    | true, unabbreviated -> Namespaces.TryGetValue unabbreviated |> function
+                        | false, _ -> QsCompilerError.Raise "the corresponding namespace for a namespace short name could not be found"; Null
+                        | true, ns -> Value ns
+                    | false, _ -> Null
+                | false, _ -> ArgumentException "no namespace with the given name exists" |> raise
+            | true, ns -> Value ns
         finally syncRoot.ExitReadLock()
 
     /// Fully (i.e. recursively) resolves the given Q# type used within the given parent in the given source file.

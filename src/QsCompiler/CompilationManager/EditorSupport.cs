@@ -664,7 +664,7 @@ namespace Microsoft.Quantum.QsCompiler.CompilationBuilder
             // example, at the beginning of a statement, only function names (for functions that return Unit), operation
             // names (for operations that return Unit, and if the position is in another operation), and certain
             // keywords are allowed.
-            var unqualifiedNamespaces = GetUnqualifiedNamespaces(file, compilation, position);
+            var openNamespaces = GetOpenNamespaces(file, compilation, position);
             var completions = namespacePath != null
                 ?
                 GetCallableCompletions(file, compilation, new[] { namespacePath })
@@ -674,8 +674,8 @@ namespace Microsoft.Quantum.QsCompiler.CompilationBuilder
                 Keywords.ReservedKeywords
                 .Select(keyword => new CompletionItem() { Label = keyword, Kind = CompletionItemKind.Keyword })
                 .Concat(GetLocalCompletions(file, compilation, position))
-                .Concat(GetCallableCompletions(file, compilation, unqualifiedNamespaces))
-                .Concat(GetTypeCompletions(file, compilation, unqualifiedNamespaces))
+                .Concat(GetCallableCompletions(file, compilation, openNamespaces))
+                .Concat(GetTypeCompletions(file, compilation, openNamespaces))
                 .Concat(GetGlobalNamespaceCompletions(compilation, namespacePath ?? ""))
                 .Concat(GetNamespaceAliasCompletions(file, compilation, position));
             return new CompletionList() { IsIncomplete = false, Items = completions.ToArray() };
@@ -847,13 +847,13 @@ namespace Microsoft.Quantum.QsCompiler.CompilationBuilder
         }
 
         /// <summary>
-        /// Returns the names of all namespaces whose members can be referenced without a qualified symbol at the given
+        /// Returns the names of all namespaces that have been opened without an alias and are visible from the given
         /// position in the file.
         /// <para/>
         /// Returns null if any parameter is null. Returns an empty enumerator if there are no completions at the given
         /// position (or the position is invalid).
         /// </summary>
-        private static IEnumerable<string> GetUnqualifiedNamespaces(
+        private static IEnumerable<string> GetOpenNamespaces(
             FileContentManager file, CompilationUnit compilation, Position position)
         {
             if (file == null || compilation == null || position == null)

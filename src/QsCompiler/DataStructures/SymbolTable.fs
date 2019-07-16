@@ -646,7 +646,9 @@ and NamespaceManager
         let processTP (symName, range) = 
             if tpNames |> Seq.contains symName then TypeParameter {Origin = parent; TypeName = symName; Range = qsType.Range}, [||]
             else InvalidType, [| range |> QsCompilerDiagnostic.Error (ErrorCode.UnknownTypeParameterName, []) |]
-        SymbolResolution.ResolveType (processUDT, processTP) qsType
+        syncRoot.EnterReadLock()
+        try SymbolResolution.ResolveType (processUDT, processTP) qsType
+        finally syncRoot.ExitReadLock()
 
     /// Resolves the underlying type as well as all named and unnamed items for the given type declaration in the specified source file. 
     /// IMPORTANT: for performance reasons does *not* verify if the given the given parent and/or source file is consistent with the defined types. 

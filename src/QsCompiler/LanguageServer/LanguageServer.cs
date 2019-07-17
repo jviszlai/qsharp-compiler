@@ -464,7 +464,9 @@ namespace Microsoft.Quantum.QsLanguageServer
             await Task.Delay(50);
             try
             {
-                return EditorState.Completions(Utils.TryJTokenAs<TextDocumentPositionParams>(arg));
+                return QsCompilerError.RaiseOnFailure(
+                    () => EditorState.Completions(Utils.TryJTokenAs<TextDocumentPositionParams>(arg)),
+                    "Completions threw an exception");
             }
             catch
             {
@@ -481,7 +483,9 @@ namespace Microsoft.Quantum.QsLanguageServer
                 var data = Utils.TryJTokenAs<CompletionItemData>(JToken.FromObject(item?.Data));
                 var format = ChooseFormat(
                     this.ClientCapabilities?.TextDocument?.SignatureHelp?.SignatureInformation?.DocumentationFormat);
-                return EditorState.ResolveCompletion(item, data, format);
+                return QsCompilerError.RaiseOnFailure(
+                    () => EditorState.ResolveCompletion(item, data, format),
+                    "ResolveCompletion threw an exception");
             }
             catch
             {

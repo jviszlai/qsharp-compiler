@@ -802,7 +802,7 @@ namespace Microsoft.Quantum.QsCompiler.CompilationBuilder
                 {
                     Label = name,
                     Kind = CompletionItemKind.Module,
-                    Detail = prefix
+                    Detail = prefix.TrimEnd('.')
                 });
         }
 

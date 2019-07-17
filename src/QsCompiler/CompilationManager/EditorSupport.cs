@@ -836,17 +836,20 @@ namespace Microsoft.Quantum.QsCompiler.CompilationBuilder
         /// Returns documentation for the callable (if kind is Function or Constructor) or type (if kind is Struct) in
         /// the compilation unit with the given qualified name, or null if no documentation is available.
         /// <para/>
-        /// Returns null if the compilation unit is null or the kind is invalid.
+        /// Returns null if the compilation unit or name is null, or the kind is invalid.
         /// </summary>
         private static string TryGetDocumentation(
             CompilationUnit compilation, QsQualifiedName name, CompletionItemKind kind, bool useMarkdown)
         {
+            if (compilation == null || name == null)
+                return null;
+
             switch (kind)
             {
                 case CompletionItemKind.Function:
                 case CompletionItemKind.Constructor:
                     var callable =
-                        compilation?.GlobalSymbols.TryGetCallable(
+                        compilation.GlobalSymbols.TryGetCallable(
                             name, NonNullable<string>.New(""), NonNullable<string>.New(""))
                         .Item;
                     return
@@ -855,7 +858,7 @@ namespace Microsoft.Quantum.QsCompiler.CompilationBuilder
                         : callable.PrintSignature() + callable.Documentation.PrintSummary(useMarkdown);
                 case CompletionItemKind.Struct:
                     var type =
-                        compilation?.GlobalSymbols.TryGetType(
+                        compilation.GlobalSymbols.TryGetType(
                             name, NonNullable<string>.New(""), NonNullable<string>.New(""))
                         .Item;
                     return type?.Documentation.PrintSummary(useMarkdown);

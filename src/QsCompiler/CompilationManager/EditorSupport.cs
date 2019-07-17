@@ -761,22 +761,13 @@ namespace Microsoft.Quantum.QsCompiler.CompilationBuilder
 
             if (prefix.Length != 0 && !prefix.EndsWith("."))
                 prefix += ".";
-            var typeNames =
-                compilation.GlobalSymbols.DefinedTypes()
-                .Concat(compilation.GlobalSymbols.ImportedTypes())
-                .Select(type => type.QualifiedName);
-            var callableNames =
-                compilation.GlobalSymbols.DefinedCallables()
-                .Concat(compilation.GlobalSymbols.ImportedCallables())
-                .Select(callable => callable.QualifiedName);
             return
-                typeNames
-                .Concat(callableNames)
-                .Select(qualifiedName => qualifiedName.Namespace.Value)
-                .Where(ns => ns.StartsWith(prefix))
-                .Select(ns => String.Concat(ns.Substring(prefix.Length).TakeWhile(c => c != '.')))
+                compilation.GlobalSymbols.AllNamespaces()
+                .Select(ns => ns.Name.Value)
+                .Where(name => name.StartsWith(prefix))
+                .Select(name => String.Concat(name.Substring(prefix.Length).TakeWhile(c => c != '.')))
                 .Distinct()
-                .Select(ns => new CompletionItem() { Label = ns, Kind = CompletionItemKind.Module });
+                .Select(name => new CompletionItem() { Label = name, Kind = CompletionItemKind.Module });
         }
 
         /// <summary>

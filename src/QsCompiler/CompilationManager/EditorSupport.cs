@@ -838,12 +838,12 @@ namespace Microsoft.Quantum.QsCompiler.CompilationBuilder
         /// Returns documentation for the callable (if kind is Function or Constructor) or type (if kind is Struct) in
         /// the compilation unit with the given qualified name, or null if no documentation is available.
         /// <para/>
-        /// Returns null if the compilation unit or completion item data is null, or the kind is invalid.
+        /// Returns null if any parameter is null or invalid.
         /// </summary>
         private static string TryGetDocumentation(
             CompilationUnit compilation, CompletionItemData data, CompletionItemKind kind, bool useMarkdown)
         {
-            if (compilation == null || data == null)
+            if (compilation == null || data == null || data.QualifiedName == null || data.SourceFile == null)
                 return null;
 
             switch (kind)
@@ -948,7 +948,6 @@ namespace Microsoft.Quantum.QsCompiler.CompilationBuilder
             if (fragment == null)
                 return null;
 
-            // Find the qualified symbol at the position, if any.
             int startAt = GetTextIndexFromPosition(fragment, position);
             var match = Utils.QualifiedSymbolRTL.Match(fragment.Text, startAt);
             if (match.Success && match.Index + match.Length == startAt && match.Value.LastIndexOf('.') != -1)
@@ -1031,7 +1030,10 @@ namespace Microsoft.Quantum.QsCompiler.CompilationBuilder
         /// </summary>
         public QsQualifiedName QualifiedName
         {
-            get => new QsQualifiedName(NonNullable<string>.New(@namespace), NonNullable<string>.New(name));
+            get =>
+                @namespace == null || name == null
+                ? null
+                : new QsQualifiedName(NonNullable<string>.New(@namespace), NonNullable<string>.New(name));
             set
             {
                 @namespace = value.Namespace.Value;

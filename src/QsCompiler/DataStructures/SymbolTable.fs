@@ -599,20 +599,23 @@ and NamespaceManager
         | Value (nsName, source) -> [(nsName, source)]
         | Null -> importedNS |> List.choose (containsSource >> function | Value v -> Some v | Null -> None)
 
+    /// Returns all namespaces declared in source files or referenced assemblies.
+    member this.AllNamespaces () = ImmutableArray.CreateRange Namespaces.Values
+
     /// Given a qualifier for a symbol name, returns the corresponding namespace as Some
     /// if such a namespace or such a namespace short name within the given parent namespace and source file exists. 
     /// Throws an ArgumentException if the qualifier does not correspond to a known namespace and the given parent namespace does not exist.
     member this.TryResolveQualifier qualifier (nsName, source) = 
         syncRoot.EnterReadLock()
         try match Namespaces.TryGetValue qualifier with
-        | false, _ -> Namespaces.TryGetValue nsName |> function // check if qualifier is a namespace short name
-            | true, parentNS -> (parentNS.NamespaceShortNames source).TryGetValue qualifier |> function
-                | true, unabbreviated -> Namespaces.TryGetValue unabbreviated |> function
-                    | false, _ -> QsCompilerError.Raise "the corresponding namespace for a namespace short name could not be found"; None
-                    | true, ns -> Some ns
-                | false, _ -> None
-            | false, _ -> ArgumentException "no namespace with the given name exists" |> raise
-        | true, ns -> Some ns
+            | false, _ -> Namespaces.TryGetValue nsName |> function // check if qualifier is a namespace short name
+                | true, parentNS -> (parentNS.NamespaceShortNames source).TryGetValue qualifier |> function
+                    | true, unabbreviated -> Namespaces.TryGetValue unabbreviated |> function
+                        | false, _ -> QsCompilerError.Raise "the corresponding namespace for a namespace short name could not be found"; Null
+                        | true, ns -> Value ns
+                    | false, _ -> Null
+                | false, _ -> ArgumentException "no namespace with the given name exists" |> raise
+            | true, ns -> Value ns
         finally syncRoot.ExitReadLock()
 
     /// Fully (i.e. recursively) resolves the given Q# type used within the given parent in the given source file.
@@ -639,14 +642,16 @@ and NamespaceManager
                 | Value (ns, _), errs -> UserDefinedType {Namespace = ns; Name = symName; Range = qsType.Range}, errs 
                 | Null, errs -> InvalidType, errs
             | Some qualifier -> (parent.Namespace, source) |> this.TryResolveQualifier qualifier |> function
-                | None -> InvalidType, [| range |> QsCompilerDiagnostic.Error (ErrorCode.UnknownNamespace, []) |] 
-                | Some ns -> ns.ContainsType symName |> function
+                | Null -> InvalidType, [| range |> QsCompilerDiagnostic.Error (ErrorCode.UnknownNamespace, []) |] 
+                | Value ns -> ns.ContainsType symName |> function
                     | Value _ -> UserDefinedType {Namespace = ns.Name; Name = symName; Range = qsType.Range}, [||]
                     | Null -> InvalidType, [| range |> QsCompilerDiagnostic.Error (ErrorCode.UnknownTypeInNamespace, []) |]
         let processTP (symName, range) = 
             if tpNames |> Seq.contains symName then TypeParameter {Origin = parent; TypeName = symName; Range = qsType.Range}, [||]
             else InvalidType, [| range |> QsCompilerDiagnostic.Error (ErrorCode.UnknownTypeParameterName, []) |]
-        SymbolResolution.ResolveType (processUDT, processTP) qsType
+        syncRoot.EnterReadLock()
+        try SymbolResolution.ResolveType (processUDT, processTP) qsType
+        finally syncRoot.ExitReadLock()
 
     /// Resolves the underlying type as well as all named and unnamed items for the given type declaration in the specified source file. 
     /// IMPORTANT: for performance reasons does *not* verify if the given the given parent and/or source file is consistent with the defined types. 
@@ -984,8 +989,8 @@ and NamespaceManager
             }
         syncRoot.EnterReadLock()
         try match (nsName, source) |> this.TryResolveQualifier callableName.Namespace with
-            | None -> Null
-            | Some ns -> ns.CallablesInReferencedAssemblies.TryGetValue callableName.Name |> function
+            | Null -> Null
+            | Value ns -> ns.CallablesInReferencedAssemblies.TryGetValue callableName.Name |> function
                 | true, cDecl -> Value cDecl
                 | false, _ -> declSource |> function
                     | Some source -> 
@@ -1042,8 +1047,8 @@ and NamespaceManager
             }
         syncRoot.EnterReadLock()
         try match (nsName, source) |> this.TryResolveQualifier typeName.Namespace with 
-            | None -> Null
-            | Some ns -> ns.TypesInReferencedAssemblies.TryGetValue typeName.Name |> function
+            | Null -> Null
+            | Value ns -> ns.TypesInReferencedAssemblies.TryGetValue typeName.Name |> function
                 | true, tDecl -> Value tDecl
                 | false, _ -> declSource |> function
                     | Some source ->

@@ -925,8 +925,8 @@ namespace Microsoft.Quantum.QsCompiler.CompilationBuilder
         /// processing).
         /// </summary>
         public CompletionItem ResolveCompletion(CompletionItem item, CompletionItemData data, MarkupKind format) =>
-            this.Manager(data?.Source?.Uri)?.FileQuery(
-                data.Source,
+            this.Manager(data?.TextDocument?.Uri)?.FileQuery(
+                data.TextDocument,
                 (_, compilation) => compilation.ResolveCompletion(item, data, format),
                 suppressExceptionLogging: true);
 

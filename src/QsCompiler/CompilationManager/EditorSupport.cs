@@ -691,8 +691,7 @@ namespace Microsoft.Quantum.QsCompiler.CompilationBuilder
         {
             if (item == null)
                 return null;
-            var documentation = TryGetDocumentation(
-                compilation, data?.QualifiedName, item.Kind, format == MarkupKind.Markdown);
+            var documentation = TryGetDocumentation(compilation, data, item.Kind, format == MarkupKind.Markdown);
             if (documentation != null)
                 item.Documentation = new MarkupContent() { Kind = format, Value = documentation };
             return item;
@@ -742,8 +741,9 @@ namespace Microsoft.Quantum.QsCompiler.CompilationBuilder
                     Detail = callable.QualifiedName.Namespace.Value,
                     Data = new CompletionItemData()
                     {
-                        Source = new TextDocumentIdentifier() { Uri = file.Uri },
-                        QualifiedName = callable.QualifiedName
+                        TextDocument = new TextDocumentIdentifier() { Uri = file.Uri },
+                        QualifiedName = callable.QualifiedName,
+                        SourceFile = callable.SourceFile.Value
                     }
                 });
         }
@@ -769,8 +769,9 @@ namespace Microsoft.Quantum.QsCompiler.CompilationBuilder
                     Detail = type.QualifiedName.Namespace.Value,
                     Data = new CompletionItemData()
                     {
-                        Source = new TextDocumentIdentifier() { Uri = file.Uri },
-                        QualifiedName = type.QualifiedName
+                        TextDocument = new TextDocumentIdentifier() { Uri = file.Uri },
+                        QualifiedName = type.QualifiedName,
+                        SourceFile = type.SourceFile.Value
                     }
                 });
         }
@@ -836,12 +837,12 @@ namespace Microsoft.Quantum.QsCompiler.CompilationBuilder
         /// Returns documentation for the callable (if kind is Function or Constructor) or type (if kind is Struct) in
         /// the compilation unit with the given qualified name, or null if no documentation is available.
         /// <para/>
-        /// Returns null if the compilation unit or name is null, or the kind is invalid.
+        /// Returns null if the compilation unit or completion item data is null, or the kind is invalid.
         /// </summary>
         private static string TryGetDocumentation(
-            CompilationUnit compilation, QsQualifiedName name, CompletionItemKind kind, bool useMarkdown)
+            CompilationUnit compilation, CompletionItemData data, CompletionItemKind kind, bool useMarkdown)
         {
-            if (compilation == null || name == null)
+            if (compilation == null || data == null)
                 return null;
 
             switch (kind)
@@ -850,7 +851,7 @@ namespace Microsoft.Quantum.QsCompiler.CompilationBuilder
                 case CompletionItemKind.Constructor:
                     var callable =
                         compilation.GlobalSymbols.TryGetCallable(
-                            name, NonNullable<string>.New(""), NonNullable<string>.New(""))
+                            data.QualifiedName, data.QualifiedName.Namespace, NonNullable<string>.New(data.SourceFile))
                         .Item;
                     return
                         callable == null
@@ -859,7 +860,7 @@ namespace Microsoft.Quantum.QsCompiler.CompilationBuilder
                 case CompletionItemKind.Struct:
                     var type =
                         compilation.GlobalSymbols.TryGetType(
-                            name, NonNullable<string>.New(""), NonNullable<string>.New(""))
+                            data.QualifiedName, data.QualifiedName.Namespace, NonNullable<string>.New(data.SourceFile))
                         .Item;
                     return type?.Documentation.PrintSummary(useMarkdown);
                 default:
@@ -1021,8 +1022,8 @@ namespace Microsoft.Quantum.QsCompiler.CompilationBuilder
         /// <summary>
         /// The text document that the original completion request was made from.
         /// </summary>
-        [DataMember(Name = "source")]
-        public TextDocumentIdentifier Source { get; set; }
+        [DataMember(Name = "textDocument")]
+        public TextDocumentIdentifier TextDocument { get; set; }
 
         /// <summary>
         /// The qualified name of the completion item.
@@ -1036,5 +1037,11 @@ namespace Microsoft.Quantum.QsCompiler.CompilationBuilder
                 name = value.Name.Value;
             }
         }
+
+        /// <summary>
+        /// The source file the completion item is declared in.
+        /// </summary>
+        [DataMember(Name = "sourceFile")]
+        public string SourceFile { get; set; }
     }
 }

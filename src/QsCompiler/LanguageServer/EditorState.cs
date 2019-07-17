@@ -375,7 +375,7 @@ namespace Microsoft.Quantum.QsLanguageServer
         /// ignored.
         /// </summary>
         internal CompletionItem ResolveCompletion(CompletionItem item, CompletionItemData data, MarkupKind format) =>
-            item != null && ValidFileUri(data?.Source?.Uri) && !IgnoreFile(data.Source.Uri)
+            item != null && ValidFileUri(data?.TextDocument?.Uri) && !IgnoreFile(data.TextDocument.Uri)
             ? this.Projects.ResolveCompletion(item, data, format)
             : null;
 

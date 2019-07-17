@@ -689,7 +689,7 @@ namespace Microsoft.Quantum.QsCompiler.CompilationBuilder
         public static CompletionItem ResolveCompletion(
             this CompilationUnit compilation, CompletionItem item, CompletionItemData data, MarkupKind format)
         {
-            if (item == null)
+            if (compilation == null || item == null || data == null)
                 return null;
             var documentation = TryGetDocumentation(compilation, data, item.Kind, format == MarkupKind.Markdown);
             if (documentation != null)

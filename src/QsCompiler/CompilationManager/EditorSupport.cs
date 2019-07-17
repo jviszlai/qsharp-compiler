@@ -681,10 +681,11 @@ namespace Microsoft.Quantum.QsCompiler.CompilationBuilder
         }
 
         /// <summary>
-        /// Resolves additional information for the given completion item. The item may be mutated.
+        /// Updates the given completion item with additional information if any is available. The completion item
+        /// returned is a reference to the same completion item that was given; the given completion item is mutated
+        /// with the additional information.
         /// <para/>
-        /// Returns the same completion item that was given, possibly with changes. If any parameter is null, the item
-        /// is not changed.
+        /// Returns null (and the item is not updated) if any parameter is null.
         /// </summary>
         public static CompletionItem ResolveCompletion(
             this CompilationUnit compilation, CompletionItem item, CompletionItemData data, MarkupKind format)

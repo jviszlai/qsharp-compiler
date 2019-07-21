@@ -795,10 +795,9 @@ namespace Microsoft.Quantum.QsCompiler.CompilationBuilder
             if (prefix.Length != 0 && !prefix.EndsWith("."))
                 prefix += ".";
             return
-                compilation.GlobalSymbols.AllNamespaces()
-                .Select(ns => ns.Name.Value)
-                .Where(name => name.StartsWith(prefix))
-                .Select(name => String.Concat(name.Substring(prefix.Length).TakeWhile(c => c != '.')))
+                compilation.GlobalSymbols.NamespaceNames()
+                .Where(name => name.Value.StartsWith(prefix))
+                .Select(name => String.Concat(name.Value.Substring(prefix.Length).TakeWhile(c => c != '.')))
                 .Distinct()
                 .Select(name => new CompletionItem()
                 {
@@ -850,20 +849,19 @@ namespace Microsoft.Quantum.QsCompiler.CompilationBuilder
             {
                 case CompletionItemKind.Function:
                 case CompletionItemKind.Constructor:
-                    var callable =
-                        compilation.GlobalSymbols.TryGetCallable(
-                            data.QualifiedName, data.QualifiedName.Namespace, NonNullable<string>.New(data.SourceFile))
-                        .Item;
-                    return
-                        callable == null
-                        ? null
-                        : callable.PrintSignature() + callable.Documentation.PrintSummary(useMarkdown);
+                    var callable = compilation.GlobalSymbols.TryGetCallable(
+                        data.QualifiedName, data.QualifiedName.Namespace, NonNullable<string>.New(data.SourceFile));
+                    if (callable.IsNull)
+                        return null;
+                    var signature = callable.Item.PrintSignature();
+                    var documentation = callable.Item.Documentation.PrintSummary(useMarkdown);
+                    return signature.Trim() + "\n\n" + documentation.Trim();
                 case CompletionItemKind.Struct:
                     var type =
                         compilation.GlobalSymbols.TryGetType(
                             data.QualifiedName, data.QualifiedName.Namespace, NonNullable<string>.New(data.SourceFile))
                         .Item;
-                    return type?.Documentation.PrintSummary(useMarkdown);
+                    return type?.Documentation.PrintSummary(useMarkdown).Trim();
                 default:
                     return null;
             }
@@ -997,13 +995,12 @@ namespace Microsoft.Quantum.QsCompiler.CompilationBuilder
         {
             if (file == null || compilation == null || position == null || alias == null)
                 return null;
-
             string nsName = file.TryGetNamespaceAt(position);
             if (nsName == null)
                 return alias;
-            var ns = compilation.GlobalSymbols.TryResolveQualifier(
-                NonNullable<string>.New(alias), NonNullable<string>.New(nsName), file.FileName);
-            return ns.IsValue ? ns.Item.Name.Value : alias;
+            return compilation.GlobalSymbols.TryResolveNamespaceAlias(
+                NonNullable<string>.New(alias), NonNullable<string>.New(nsName), file.FileName)
+                ?? alias;
         }
     }
 

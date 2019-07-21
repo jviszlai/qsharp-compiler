@@ -24,6 +24,15 @@ namespace Microsoft.Quantum.QsCompiler.CompilationBuilder
         // utils for getting the necessary information for editor commands
 
         /// <summary>
+        /// The empty completion list.
+        /// </summary>
+        private static readonly CompletionList emptyCompletionList = new CompletionList()
+        {
+            IsIncomplete = false,
+            Items = Array.Empty<CompletionItem>()
+        };
+
+        /// <summary>
         /// Throws an ArgumentNullException if the given offset or relative range is null.
         /// </summary>
         private static Location AsLocation(NonNullable<string> source,
@@ -324,12 +333,12 @@ namespace Microsoft.Quantum.QsCompiler.CompilationBuilder
         /// </summary>
         public static WorkspaceEdit Rename(this FileContentManager file, CompilationUnit compilation, Position position, string newName)
         {
-            if (newName == null || file == null) return null; 
+            if (newName == null || file == null) return null;
             var found = file.TryGetReferences(compilation, position, out var declLocation, out var locations);
             if (!found) return null;
             if (declLocation != null) locations = new[] { declLocation }.Concat(locations);
 
-            var changes = locations.ToLookup(loc => loc.Uri, loc => new TextEdit { Range = loc.Range, NewText = newName}); 
+            var changes = locations.ToLookup(loc => loc.Uri, loc => new TextEdit { Range = loc.Range, NewText = newName});
             return new WorkspaceEdit
             {
                 DocumentChanges = changes
@@ -556,7 +565,7 @@ namespace Microsoft.Quantum.QsCompiler.CompilationBuilder
                 var ctlQsName = QsLocalSymbol.NewValidName(NonNullable<string>.New(nrCtlApplications == 0 ? "cs" : $"cs{nrCtlApplications}"));
                 argTuple = SyntaxGenerator.WithControlQubits(argTuple, QsNullable<Tuple<int, int>>.Null, ctlQsName, QsNullable<Tuple<QsPositionInfo, QsPositionInfo>>.Null);
             }
-            
+
             // now that we now what callable is called we need to check which argument should come next
 
             bool BeforePosition(Tuple<QsPositionInfo, QsPositionInfo> symRange) =>
@@ -580,7 +589,7 @@ namespace Microsoft.Quantum.QsCompiler.CompilationBuilder
                 var declItems = decl as QsTuple<LocalVariableDeclaration<QsLocalSymbol>>.QsTuple;
                 var exItems = ex?.Expression as QsExpressionKind<QsExpression, QsSymbol, QsType>.ValueTuple;
                 if (declItems == null) return new[] { Null };
-                if (exItems == null && declItems.Item.Length > 1) return SingleItem(decl.PrintArgumentTuple()); 
+                if (exItems == null && declItems.Item.Length > 1) return SingleItem(decl.PrintArgumentTuple());
 
                 var argItems = exItems != null ? exItems.Item : (ex == null ? ImmutableArray<QsExpression>.Empty : ImmutableArray.Create(ex));
                 return argItems.AddRange(Enumerable.Repeat<QsExpression>(null, declItems.Item.Length - argItems.Length))
@@ -606,7 +615,7 @@ namespace Microsoft.Quantum.QsCompiler.CompilationBuilder
                 if (f.IsAdjoint) signatureLabel = $"{Keywords.qsAdjointFunctor.id} {signatureLabel}";
                 if (f.IsControlled) signatureLabel = $"{Keywords.qsControlledFunctor.id} {signatureLabel}";
             }
-                
+
             var doc = documentation.PrintSummary(format == MarkupKind.Markdown).TrimStart();
             var info = new SignatureInformation
             {
@@ -620,55 +629,67 @@ namespace Microsoft.Quantum.QsCompiler.CompilationBuilder
             return new SignatureHelp
             {
                 Signatures = new[] { info }, // since we don't support overloading there is just one signature here
-                ActiveSignature = 0, 
-                ActiveParameter = precedingArgs.Count() 
+                ActiveSignature = 0,
+                ActiveParameter = precedingArgs.Count()
             };
         }
 
         /// <summary>
         /// Returns a list of suggested completion items for the given position.
         /// <para/>
-        /// Returns an empty CompletionList if any parameter is null, the position is invalid, or no completions are
-        /// available at the given position.
+        /// Returns null if any parameter is null. Returns an empty enumerator if there are no completions at the given
+        /// position (or the position is invalid).
         /// </summary>
         public static CompletionList Completions(
             this FileContentManager file, CompilationUnit compilation, Position position)
         {
+            if (file == null || compilation == null || position == null)
+                return null;
+
             // New symbols shouldn't get any completions for existing symbols.
-            if (file == null || compilation == null || position == null || IsDeclaringNewSymbol(file, position))
-                return new CompletionList() { IsIncomplete = false, Items = Array.Empty<CompletionItem>() };
+            if (IsDeclaringNewSymbol(file, position))
+                return emptyCompletionList;
+
+            var namespacePath =
+                ResolveNamespaceAlias(file, compilation, position, GetSymbolNamespacePath(file, position));
+
+            // If the character at the position is a dot but no valid namespace path precedes it (for example, in a
+            // decimal number), then no completions are valid here.
+            if (namespacePath == null && file.GetLine(position.Line).Text[position.Character - 1] == '.')
+                return emptyCompletionList;
 
             // TODO: Show only syntactically valid completions depending on the position in the source code. For
             // example, at the beginning of a statement, only function names (for functions that return Unit), operation
             // names (for operations that return Unit, and if the position is in another operation), and certain
             // keywords are allowed.
-            var keywordCompletions =
+            var openNamespaces = GetOpenNamespaces(file, compilation, position);
+            var completions = namespacePath != null
+                ?
+                GetCallableCompletions(file, compilation, new[] { namespacePath })
+                .Concat(GetTypeCompletions(file, compilation, new[] { namespacePath }))
+                .Concat(GetGlobalNamespaceCompletions(compilation, namespacePath))
+                :
                 Keywords.ReservedKeywords
-                .Select(keyword => new CompletionItem() { Label = keyword, Kind = CompletionItemKind.Keyword });
-            return new CompletionList()
-            {
-                IsIncomplete = false,
-                Items =
-                    keywordCompletions
-                    .Concat(GetLocalCompletions(file, compilation, position))
-                    .Concat(GetCallableCompletions(file, compilation, position))
-                    .Concat(GetTypeCompletions(file, compilation, position))
-                    .ToArray()
-            };
+                .Select(keyword => new CompletionItem() { Label = keyword, Kind = CompletionItemKind.Keyword })
+                .Concat(GetLocalCompletions(file, compilation, position))
+                .Concat(GetCallableCompletions(file, compilation, openNamespaces))
+                .Concat(GetTypeCompletions(file, compilation, openNamespaces))
+                .Concat(GetGlobalNamespaceCompletions(compilation, namespacePath ?? ""))
+                .Concat(GetNamespaceAliasCompletions(file, compilation, position));
+            return new CompletionList() { IsIncomplete = false, Items = completions.ToArray() };
         }
 
         /// <summary>
         /// Returns completions for local variables at the given position.
         /// <para/>
-        /// Returns an empty enumerator if any parameter is null, the position is invalid, or no completions are
-        /// available at the given position.
+        /// Returns null if any parameter is null. Returns an empty enumerator if there are no completions at the given
+        /// position (or the position is invalid).
         /// </summary>
         private static IEnumerable<CompletionItem> GetLocalCompletions(
             FileContentManager file, CompilationUnit compilation, Position position)
         {
             if (file == null || compilation == null || position == null)
-                return Array.Empty<CompletionItem>();
-
+                return null;
             return
                 compilation
                 .TryGetLocalDeclarations(file, position, out var _)
@@ -681,22 +702,19 @@ namespace Microsoft.Quantum.QsCompiler.CompilationBuilder
         }
 
         /// <summary>
-        /// Returns completions for all callables at the given position.
+        /// Returns completions for all callables in any of the given namespaces.
         /// <para/>
-        /// Returns an empty enumerator if any parameter is null, the position is invalid, or no completions are
-        /// available at the given position.
+        /// Returns null if any parameter is null. Returns an empty enumerator if there are no completions available.
         /// </summary>
         private static IEnumerable<CompletionItem> GetCallableCompletions(
-            FileContentManager file, CompilationUnit compilation, Position position)
+            FileContentManager file, CompilationUnit compilation, IEnumerable<string> namespaces)
         {
-            if (file == null || compilation == null || position == null)
-                return Array.Empty<CompletionItem>();
-
-            var unqualifiedNamespaces = GetUnqualifiedNamespaces(file, compilation, position);
+            if (file == null || compilation == null || namespaces == null)
+                return null;
             return
                 compilation.GlobalSymbols.DefinedCallables()
                 .Concat(compilation.GlobalSymbols.ImportedCallables())
-                .Where(callable => unqualifiedNamespaces.Contains(callable.QualifiedName.Namespace.Value))
+                .Where(callable => namespaces.Contains(callable.QualifiedName.Namespace.Value))
                 .Select(callable => new CompletionItem()
                 {
                     Label = callable.QualifiedName.Name.Value,
@@ -706,22 +724,19 @@ namespace Microsoft.Quantum.QsCompiler.CompilationBuilder
         }
 
         /// <summary>
-        /// Returns completions for all types at the given position.
+        /// Returns completions for all types in any of the given namespaces.
         /// <para/>
-        /// Returns an empty enumerator if any parameter is null, the position is invalid, or no completions are
-        /// available at the given position.
+        /// Returns null if any parameter is null. Returns an empty enumerator if there are no completions available.
         /// </summary>
         private static IEnumerable<CompletionItem> GetTypeCompletions(
-            FileContentManager file, CompilationUnit compilation, Position position)
+            FileContentManager file, CompilationUnit compilation, IEnumerable<string> namespaces)
         {
-            if (file == null || compilation == null || position == null)
-                return Array.Empty<CompletionItem>();
-
-            var unqualifiedNamespaces = GetUnqualifiedNamespaces(file, compilation, position);
-            return 
+            if (file == null || compilation == null || namespaces == null)
+                return null;
+            return
                 compilation.GlobalSymbols.DefinedTypes()
                 .Concat(compilation.GlobalSymbols.ImportedTypes())
-                .Where(type => unqualifiedNamespaces.Contains(type.QualifiedName.Namespace.Value))
+                .Where(type => namespaces.Contains(type.QualifiedName.Namespace.Value))
                 .Select(type => new CompletionItem()
                 {
                     Label = type.QualifiedName.Name.Value,
@@ -730,9 +745,55 @@ namespace Microsoft.Quantum.QsCompiler.CompilationBuilder
         }
 
         /// <summary>
+        /// Returns completions for all global namespaces with the given prefix. The completion names contain only the
+        /// word after the prefix and before the next dot.
+        /// <para/>
+        /// Note: a dot will be added after the given prefix if it is not the empty string, and doesn't already end with
+        /// a dot.
+        /// <para/>
+        /// Returns null if any argument is null. Returns an empty enumerator if there are no completions available.
+        /// </summary>
+        private static IEnumerable<CompletionItem> GetGlobalNamespaceCompletions(
+            CompilationUnit compilation, string prefix)
+        {
+            if (compilation == null || prefix == null)
+                return null;
+
+            if (prefix.Length != 0 && !prefix.EndsWith("."))
+                prefix += ".";
+            return
+                compilation.GlobalSymbols.NamespaceNames()
+                .Where(name => name.Value.StartsWith(prefix))
+                .Select(name => String.Concat(name.Value.Substring(prefix.Length).TakeWhile(c => c != '.')))
+                .Distinct()
+                .Select(name => new CompletionItem() { Label = name, Kind = CompletionItemKind.Module });
+        }
+
+        /// <summary>
+        /// Returns completions for namespace aliases that are visible at the given position in the file.
+        /// <para/>
+        /// Returns null if any parameter is null. Returns an empty enumerator if there are no completions at the given
+        /// position (or the position is invalid).
+        /// </summary>
+        private static IEnumerable<CompletionItem> GetNamespaceAliasCompletions(
+            FileContentManager file, CompilationUnit compilation, Position position)
+        {
+            if (file == null || compilation == null || position == null)
+                return null;
+            string @namespace = file.TryGetNamespaceAt(position);
+            return
+                @namespace == null
+                ? Array.Empty<CompletionItem>()
+                : compilation
+                .GetOpenDirectives(NonNullable<string>.New(@namespace))[file.FileName]
+                .Where(open => open.Item2 != null)
+                .Select(open => new CompletionItem() { Label = open.Item2, Kind = CompletionItemKind.Module });
+        }
+
+        /// <summary>
         /// Returns true if a new symbol is being declared at the given position.
         /// <para/>
-        /// If any parameter is null or the position is invalid, returns false.
+        /// Returns false if any parameter is null or the position is invalid.
         /// </summary>
         private static bool IsDeclaringNewSymbol(FileContentManager file, Position position)
         {
@@ -774,33 +835,96 @@ namespace Microsoft.Quantum.QsCompiler.CompilationBuilder
         }
 
         /// <summary>
-        /// Returns the names of all namespaces whose members can be referenced without a qualified symbol at the given
+        /// Returns the names of all namespaces that have been opened without an alias and are visible from the given
         /// position in the file.
         /// <para/>
-        /// Returns an empty or incomplete list of namespaces if any parameter is null or the position is invalid.
+        /// Returns null if any parameter is null. Returns an empty enumerator if there are no completions at the given
+        /// position (or the position is invalid).
         /// </summary>
-        private static IEnumerable<string> GetUnqualifiedNamespaces(
+        private static IEnumerable<string> GetOpenNamespaces(
             FileContentManager file, CompilationUnit compilation, Position position)
         {
+            if (file == null || compilation == null || position == null)
+                return null;
             string @namespace = file.TryGetNamespaceAt(position);
-            if (@namespace == null)
-                return Array.Empty<string>();
-            if (compilation == null)
-                return new[] { @namespace };
+            return
+                @namespace == null
+                ? Array.Empty<string>()
+                : compilation
+                .GetOpenDirectives(NonNullable<string>.New(@namespace))[file.FileName]
+                .Where(open => open.Item2 == null)  // Only include open directives without an alias.
+                .Select(open => open.Item1.Value)
+                .Concat(new[] { @namespace });
+        }
 
-            try
+        /// <summary>
+        /// Returns the namespace path for the qualified symbol at the given position, or null if there is no qualified
+        /// symbol.
+        /// <para/>
+        /// Returns null if any parameter is null.
+        /// </summary>
+        private static string GetSymbolNamespacePath(FileContentManager file, Position position)
+        {
+            var fragment = file.TryGetFragmentAt(position, includeEnd: true);
+            if (fragment == null)
+                return null;
+
+            // Find the qualified symbol at the position, if any.
+            int startAt = GetTextIndexFromPosition(fragment, position);
+            var match = Utils.QualifiedSymbolRTL.Match(fragment.Text, startAt);
+            if (match.Success && match.Index + match.Length == startAt && match.Value.LastIndexOf('.') != -1)
+                return match.Value.Substring(0, match.Value.LastIndexOf('.'));
+            else
+                return null;
+        }
+
+        /// <summary>
+        /// Returns the index in the fragment text corresponding to the given absolute position.
+        /// </summary>
+        /// <exception cref="ArgumentException">
+        /// Thrown when the position is not contained within the fragment.
+        /// </exception>
+        private static int GetTextIndexFromPosition(CodeFragment fragment, Position position)
+        {
+            if (fragment == null)
+                throw new ArgumentNullException("fragment");
+            if (position == null)
+                throw new ArgumentNullException("position");
+
+            int relativeLine = position.Line - fragment.GetRange().Start.Line;
+            string[] lines = Utils.SplitLines(fragment.Text);
+            int relativeChar =
+                relativeLine == 0 ? position.Character - fragment.GetRange().Start.Character : position.Character;
+
+            if (relativeLine < 0 ||
+                relativeLine >= lines.Length ||
+                relativeChar < 0 ||
+                // Assume includeEnd is true and allow the position to be one character after the last character in the
+                // fragment (so only check strictly greater than).
+                relativeChar > lines[relativeLine].Length)
             {
-                return
-                    compilation
-                    .GetOpenDirectives(NonNullable<string>.New(@namespace))[file.FileName]
-                    .Where(open => open.Item2 == null)  // Only include open directives without a short name.
-                    .Select(open => open.Item1.Value)
-                    .Concat(new[] { @namespace });
+                throw new ArgumentException("position is not contained within the fragment", "position");
             }
-            catch (ArgumentException)
-            {
-                return new[] { @namespace };
-            }
+            return lines.Take(relativeLine).Sum(line => line.Length) + relativeChar;
+        }
+
+        /// <summary>
+        /// Resolves the namespace alias and returns its full namespace name. If the alias couldn't be resolved, returns
+        /// the alias unchanged.
+        /// <para/>
+        /// Returns null if any parameter is null.
+        /// </summary>
+        private static string ResolveNamespaceAlias(
+            FileContentManager file, CompilationUnit compilation, Position position, string alias)
+        {
+            if (file == null || compilation == null || position == null || alias == null)
+                return null;
+            string nsName = file.TryGetNamespaceAt(position);
+            if (nsName == null)
+                return alias;
+            return compilation.GlobalSymbols.TryResolveNamespaceAlias(
+                NonNullable<string>.New(alias), NonNullable<string>.New(nsName), file.FileName)
+                ?? alias;
         }
     }
 }

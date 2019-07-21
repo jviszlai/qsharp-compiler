@@ -157,7 +157,7 @@ namespace Microsoft.Quantum.QsLanguageServer
             var capabilities = new ServerCapabilities
             {
                 TextDocumentSync = new TextDocumentSyncOptions(),
-                CompletionProvider = null,
+                CompletionProvider = new CompletionOptions(),
                 SignatureHelpProvider = new SignatureHelpOptions(),
                 ExecuteCommandProvider = new ExecuteCommandOptions(),
             };
@@ -174,11 +174,7 @@ namespace Microsoft.Quantum.QsLanguageServer
             capabilities.DocumentHighlightProvider = true;
             capabilities.SignatureHelpProvider.TriggerCharacters = new[] { "," };
             capabilities.ExecuteCommandProvider.Commands = new[] { CommandIds.ApplyEdit }; // do not declare internal capabilities 
-            capabilities.CompletionProvider = new CompletionOptions
-            {
-                ResolveProvider = false,
-                TriggerCharacters = Array.Empty<string>()
-            };
+            capabilities.CompletionProvider.TriggerCharacters = new[] { "." };
 
             this.WaitForInit = null;
             return new InitializeResult { Capabilities = capabilities };
@@ -459,13 +455,19 @@ namespace Microsoft.Quantum.QsLanguageServer
         }
 
         [JsonRpcMethod(Methods.TextDocumentCompletionName)]
-        public CompletionList OnTextDocumentCompletion(JToken arg)
+        public async Task<CompletionList> OnTextDocumentCompletionAsync(JToken arg)
         {
+            // Wait for the file manager to finish processing any changes that happened right before this completion
+            // request.
+            await Task.Delay(50);
             try
             {
                 return EditorState.Completions(Utils.TryJTokenAs<TextDocumentPositionParams>(arg));
             }
-            catch { return null; }
+            catch
+            {
+                return null;
+            }
         }
     }
 }

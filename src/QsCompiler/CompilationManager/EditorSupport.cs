@@ -795,10 +795,9 @@ namespace Microsoft.Quantum.QsCompiler.CompilationBuilder
             if (prefix.Length != 0 && !prefix.EndsWith("."))
                 prefix += ".";
             return
-                compilation.GlobalSymbols.AllNamespaces()
-                .Select(ns => ns.Name.Value)
-                .Where(name => name.StartsWith(prefix))
-                .Select(name => String.Concat(name.Substring(prefix.Length).TakeWhile(c => c != '.')))
+                compilation.GlobalSymbols.NamespaceNames()
+                .Where(name => name.Value.StartsWith(prefix))
+                .Select(name => String.Concat(name.Value.Substring(prefix.Length).TakeWhile(c => c != '.')))
                 .Distinct()
                 .Select(name => new CompletionItem()
                 {
@@ -997,13 +996,12 @@ namespace Microsoft.Quantum.QsCompiler.CompilationBuilder
         {
             if (file == null || compilation == null || position == null || alias == null)
                 return null;
-
             string nsName = file.TryGetNamespaceAt(position);
             if (nsName == null)
                 return alias;
-            var ns = compilation.GlobalSymbols.TryResolveQualifier(
-                NonNullable<string>.New(alias), NonNullable<string>.New(nsName), file.FileName);
-            return ns.IsValue ? ns.Item.Name.Value : alias;
+            return compilation.GlobalSymbols.TryResolveNamespaceAlias(
+                NonNullable<string>.New(alias), NonNullable<string>.New(nsName), file.FileName)
+                ?? alias;
         }
     }
 

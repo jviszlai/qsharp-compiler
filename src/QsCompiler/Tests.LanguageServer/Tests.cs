@@ -77,7 +77,7 @@ namespace Microsoft.Quantum.QsLanguageServer.Testing
             Assert.IsNotNull(initReply.Capabilities.TextDocumentSync.Save);
             Assert.IsNull(initReply.Capabilities.CodeLensProvider);
             Assert.IsNotNull(initReply.Capabilities.CompletionProvider);
-            Assert.IsFalse(initReply.Capabilities.CompletionProvider.ResolveProvider);
+            Assert.IsTrue(initReply.Capabilities.CompletionProvider.ResolveProvider);
             Assert.IsNotNull(initReply.Capabilities.CompletionProvider.TriggerCharacters);
             Assert.IsTrue(initReply.Capabilities.CompletionProvider.TriggerCharacters.SequenceEqual(new[] { "." }));
             Assert.IsNotNull(initReply.Capabilities.SignatureHelpProvider?.TriggerCharacters);

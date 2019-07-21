@@ -5,6 +5,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
+using System.Runtime.Serialization;
 using Microsoft.Quantum.QsCompiler.CompilationBuilder.DataStructures;
 using Microsoft.Quantum.QsCompiler.DataTypes;
 using Microsoft.Quantum.QsCompiler.Diagnostics;
@@ -680,6 +681,24 @@ namespace Microsoft.Quantum.QsCompiler.CompilationBuilder
         }
 
         /// <summary>
+        /// Updates the given completion item with additional information if any is available. The completion item
+        /// returned is a reference to the same completion item that was given; the given completion item is mutated
+        /// with the additional information.
+        /// <para/>
+        /// Returns null (and the item is not updated) if any parameter is null.
+        /// </summary>
+        public static CompletionItem ResolveCompletion(
+            this CompilationUnit compilation, CompletionItem item, CompletionItemData data, MarkupKind format)
+        {
+            if (compilation == null || item == null || data == null)
+                return null;
+            var documentation = TryGetDocumentation(compilation, data, item.Kind, format == MarkupKind.Markdown);
+            if (documentation != null)
+                item.Documentation = new MarkupContent() { Kind = format, Value = documentation };
+            return item;
+        }
+
+        /// <summary>
         /// Returns completions for local variables at the given position.
         /// <para/>
         /// Returns null if any parameter is null. Returns an empty enumerator if there are no completions at the given
@@ -719,7 +738,14 @@ namespace Microsoft.Quantum.QsCompiler.CompilationBuilder
                 {
                     Label = callable.QualifiedName.Name.Value,
                     Kind =
-                        callable.Kind.IsTypeConstructor ? CompletionItemKind.Constructor : CompletionItemKind.Function
+                        callable.Kind.IsTypeConstructor ? CompletionItemKind.Constructor : CompletionItemKind.Function,
+                    Detail = callable.QualifiedName.Namespace.Value,
+                    Data = new CompletionItemData()
+                    {
+                        TextDocument = new TextDocumentIdentifier() { Uri = file.Uri },
+                        QualifiedName = callable.QualifiedName,
+                        SourceFile = callable.SourceFile.Value
+                    }
                 });
         }
 
@@ -740,7 +766,14 @@ namespace Microsoft.Quantum.QsCompiler.CompilationBuilder
                 .Select(type => new CompletionItem()
                 {
                     Label = type.QualifiedName.Name.Value,
-                    Kind = CompletionItemKind.Struct
+                    Kind = CompletionItemKind.Struct,
+                    Detail = type.QualifiedName.Namespace.Value,
+                    Data = new CompletionItemData()
+                    {
+                        TextDocument = new TextDocumentIdentifier() { Uri = file.Uri },
+                        QualifiedName = type.QualifiedName,
+                        SourceFile = type.SourceFile.Value
+                    }
                 });
         }
 
@@ -766,7 +799,12 @@ namespace Microsoft.Quantum.QsCompiler.CompilationBuilder
                 .Where(name => name.Value.StartsWith(prefix))
                 .Select(name => String.Concat(name.Value.Substring(prefix.Length).TakeWhile(c => c != '.')))
                 .Distinct()
-                .Select(name => new CompletionItem() { Label = name, Kind = CompletionItemKind.Module });
+                .Select(name => new CompletionItem()
+                {
+                    Label = name,
+                    Kind = CompletionItemKind.Module,
+                    Detail = prefix.TrimEnd('.')
+                });
         }
 
         /// <summary>
@@ -787,7 +825,46 @@ namespace Microsoft.Quantum.QsCompiler.CompilationBuilder
                 : compilation
                 .GetOpenDirectives(NonNullable<string>.New(@namespace))[file.FileName]
                 .Where(open => open.Item2 != null)
-                .Select(open => new CompletionItem() { Label = open.Item2, Kind = CompletionItemKind.Module });
+                .Select(open => new CompletionItem()
+                {
+                    Label = open.Item2,
+                    Kind = CompletionItemKind.Module,
+                    Detail = open.Item1.Value
+                });
+        }
+
+        /// <summary>
+        /// Returns documentation for the callable (if kind is Function or Constructor) or type (if kind is Struct) in
+        /// the compilation unit with the given qualified name, or null if no documentation is available.
+        /// <para/>
+        /// Returns null if any parameter is null or invalid.
+        /// </summary>
+        private static string TryGetDocumentation(
+            CompilationUnit compilation, CompletionItemData data, CompletionItemKind kind, bool useMarkdown)
+        {
+            if (compilation == null || data == null || data.QualifiedName == null || data.SourceFile == null)
+                return null;
+
+            switch (kind)
+            {
+                case CompletionItemKind.Function:
+                case CompletionItemKind.Constructor:
+                    var callable = compilation.GlobalSymbols.TryGetCallable(
+                        data.QualifiedName, data.QualifiedName.Namespace, NonNullable<string>.New(data.SourceFile));
+                    if (callable.IsNull)
+                        return null;
+                    var signature = callable.Item.PrintSignature();
+                    var documentation = callable.Item.Documentation.PrintSummary(useMarkdown);
+                    return signature.Trim() + "\n\n" + documentation.Trim();
+                case CompletionItemKind.Struct:
+                    var type =
+                        compilation.GlobalSymbols.TryGetType(
+                            data.QualifiedName, data.QualifiedName.Namespace, NonNullable<string>.New(data.SourceFile))
+                        .Item;
+                    return type?.Documentation.PrintSummary(useMarkdown).Trim();
+                default:
+                    return null;
+            }
         }
 
         /// <summary>
@@ -869,7 +946,6 @@ namespace Microsoft.Quantum.QsCompiler.CompilationBuilder
             if (fragment == null)
                 return null;
 
-            // Find the qualified symbol at the position, if any.
             int startAt = GetTextIndexFromPosition(fragment, position);
             var match = Utils.QualifiedSymbolRTL.Match(fragment.Text, startAt);
             if (match.Success && match.Index + match.Length == startAt && match.Value.LastIndexOf('.') != -1)
@@ -926,5 +1002,46 @@ namespace Microsoft.Quantum.QsCompiler.CompilationBuilder
                 NonNullable<string>.New(alias), NonNullable<string>.New(nsName), file.FileName)
                 ?? alias;
         }
+    }
+
+    /// <summary>
+    /// Data associated with a completion item that is used for resolving additional information.
+    /// </summary>
+    [DataContract]
+    public class CompletionItemData
+    {
+        [DataMember(Name = "namespace")]
+        private string @namespace;
+
+        [DataMember(Name = "name")]
+        private string name;
+
+        /// <summary>
+        /// The text document that the original completion request was made from.
+        /// </summary>
+        [DataMember(Name = "textDocument")]
+        public TextDocumentIdentifier TextDocument { get; set; }
+
+        /// <summary>
+        /// The qualified name of the completion item.
+        /// </summary>
+        public QsQualifiedName QualifiedName
+        {
+            get =>
+                @namespace == null || name == null
+                ? null
+                : new QsQualifiedName(NonNullable<string>.New(@namespace), NonNullable<string>.New(name));
+            set
+            {
+                @namespace = value.Namespace.Value;
+                name = value.Name.Value;
+            }
+        }
+
+        /// <summary>
+        /// The source file the completion item is declared in.
+        /// </summary>
+        [DataMember(Name = "sourceFile")]
+        public string SourceFile { get; set; }
     }
 }

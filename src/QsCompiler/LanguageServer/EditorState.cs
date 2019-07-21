@@ -364,7 +364,20 @@ namespace Microsoft.Quantum.QsLanguageServer
         /// Returns null if the given file is listed as to be ignored, or if the given parameter or its uri is null.
         /// </summary>
         public CompletionList Completions(TextDocumentPositionParams param) =>
-            ValidFileUri(param?.TextDocument?.Uri) && !IgnoreFile(param.TextDocument.Uri) ? this.Projects.Completions(param) : null;
+            ValidFileUri(param?.TextDocument?.Uri) && !IgnoreFile(param.TextDocument.Uri)
+            ? this.Projects.Completions(param)
+            : null;
+
+        /// <summary>
+        /// Resolves additional information for the given completion item.
+        /// <para/>
+        /// Returns null if any parameter is null or the file given in the original completion request is invalid or
+        /// ignored.
+        /// </summary>
+        internal CompletionItem ResolveCompletion(CompletionItem item, CompletionItemData data, MarkupKind format) =>
+            item != null && ValidFileUri(data?.TextDocument?.Uri) && !IgnoreFile(data.TextDocument.Uri)
+            ? this.Projects.ResolveCompletion(item, data, format)
+            : null;
 
 
         // utils to query the editor state server for testing purposes 

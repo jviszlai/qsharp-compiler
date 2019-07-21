@@ -10,6 +10,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Reactive.Linq;
 using Microsoft.Quantum.QsCompiler;
+using Microsoft.Quantum.QsCompiler.CompilationBuilder;
 using Microsoft.VisualStudio.LanguageServer.Protocol; 
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -174,6 +175,7 @@ namespace Microsoft.Quantum.QsLanguageServer
             capabilities.DocumentHighlightProvider = true;
             capabilities.SignatureHelpProvider.TriggerCharacters = new[] { "," };
             capabilities.ExecuteCommandProvider.Commands = new[] { CommandIds.ApplyEdit }; // do not declare internal capabilities 
+            capabilities.CompletionProvider.ResolveProvider = true;
             capabilities.CompletionProvider.TriggerCharacters = new[] { "." };
 
             this.WaitForInit = null;
@@ -462,7 +464,28 @@ namespace Microsoft.Quantum.QsLanguageServer
             await Task.Delay(50);
             try
             {
-                return EditorState.Completions(Utils.TryJTokenAs<TextDocumentPositionParams>(arg));
+                return QsCompilerError.RaiseOnFailure(
+                    () => EditorState.Completions(Utils.TryJTokenAs<TextDocumentPositionParams>(arg)),
+                    "Completions threw an exception");
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        [JsonRpcMethod(Methods.TextDocumentCompletionResolveName)]
+        public CompletionItem OnTextDocumentCompletionResolve(JToken arg)
+        {
+            try
+            {
+                var item = Utils.TryJTokenAs<CompletionItem>(arg);
+                var data = Utils.TryJTokenAs<CompletionItemData>(JToken.FromObject(item?.Data));
+                var format = ChooseFormat(
+                    this.ClientCapabilities?.TextDocument?.SignatureHelp?.SignatureInformation?.DocumentationFormat);
+                return QsCompilerError.RaiseOnFailure(
+                    () => EditorState.ResolveCompletion(item, data, format),
+                    "ResolveCompletion threw an exception");
             }
             catch
             {

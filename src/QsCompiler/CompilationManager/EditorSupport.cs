@@ -849,13 +849,13 @@ namespace Microsoft.Quantum.QsCompiler.CompilationBuilder
             {
                 case CompletionItemKind.Function:
                 case CompletionItemKind.Constructor:
-                    var callable =
-                        compilation.GlobalSymbols.TryGetCallable(
-                            data.QualifiedName, data.QualifiedName.Namespace, NonNullable<string>.New(data.SourceFile))
-                        .Item;
-                    var signature = callable.PrintSignature();
-                    var documentation = callable.Documentation.PrintSummary(useMarkdown);
-                    return callable == null ? null : signature.Trim() + "\n\n" + documentation.Trim();
+                    var callable = compilation.GlobalSymbols.TryGetCallable(
+                        data.QualifiedName, data.QualifiedName.Namespace, NonNullable<string>.New(data.SourceFile));
+                    if (callable.IsNull)
+                        return null;
+                    var signature = callable.Item.PrintSignature();
+                    var documentation = callable.Item.Documentation.PrintSummary(useMarkdown);
+                    return signature.Trim() + "\n\n" + documentation.Trim();
                 case CompletionItemKind.Struct:
                     var type =
                         compilation.GlobalSymbols.TryGetType(

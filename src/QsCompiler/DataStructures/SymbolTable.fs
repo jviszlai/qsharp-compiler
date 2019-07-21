@@ -603,20 +603,21 @@ and NamespaceManager
     /// if such a namespace or such a namespace short name within the given parent namespace and source file exists. 
     /// Throws an ArgumentException if the qualifier does not correspond to a known namespace and the given parent namespace does not exist.
     let TryResolveQualifier qualifier (nsName, source) = 
-        syncRoot.EnterReadLock()
-        try match Namespaces.TryGetValue qualifier with
-            | false, _ -> Namespaces.TryGetValue nsName |> function // check if qualifier is a namespace short name
-                | true, parentNS -> (parentNS.NamespaceShortNames source).TryGetValue qualifier |> function
-                    | true, unabbreviated -> Namespaces.TryGetValue unabbreviated |> function
-                        | false, _ -> QsCompilerError.Raise "the corresponding namespace for a namespace short name could not be found"; None
-                        | true, ns -> Some ns
-                    | false, _ -> None
-                | false, _ -> ArgumentException "no namespace with the given name exists" |> raise
-            | true, ns -> Some ns
-        finally syncRoot.ExitReadLock()
+        match Namespaces.TryGetValue qualifier with
+        | false, _ -> Namespaces.TryGetValue nsName |> function // check if qualifier is a namespace short name
+            | true, parentNS -> (parentNS.NamespaceShortNames source).TryGetValue qualifier |> function
+                | true, unabbreviated -> Namespaces.TryGetValue unabbreviated |> function
+                    | false, _ -> QsCompilerError.Raise "the corresponding namespace for a namespace short name could not be found"; None
+                    | true, ns -> Some ns
+                | false, _ -> None
+            | false, _ -> ArgumentException "no namespace with the given name exists" |> raise
+        | true, ns -> Some ns
 
     /// Returns the name of all namespaces declared in source files or referenced assemblies.
-    member this.NamespaceNames () = ImmutableArray.CreateRange (Namespaces.Values.Select (fun ns -> ns.Name))
+    member this.NamespaceNames () =
+        syncRoot.EnterReadLock()
+        try ImmutableArray.CreateRange (Namespaces.Values.Select (fun ns -> ns.Name))
+        finally syncRoot.ExitReadLock()
 
     /// Returns the fully qualified namespace name of the given namespace alias (short name). If the alias is already a
     /// fully qualified name, returns the name unchanged. Returns null if no such name exists within the given parent
@@ -624,9 +625,11 @@ and NamespaceManager
     ///
     /// Throws an ArgumentException if the given parent namespace does not exist.
     member this.TryResolveNamespaceAlias alias (nsName, source) =
-        match TryResolveQualifier alias (nsName, source) with
-        | None -> null
-        | Some ns -> ns.Name.Value
+        syncRoot.EnterReadLock()
+        try match TryResolveQualifier alias (nsName, source) with
+            | None -> null
+            | Some ns -> ns.Name.Value
+        finally syncRoot.ExitReadLock()
 
     /// Fully (i.e. recursively) resolves the given Q# type used within the given parent in the given source file.
     /// The resolution consists of replacing all unqualified names for user defined types by their qualified name.

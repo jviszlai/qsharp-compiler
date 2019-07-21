@@ -599,8 +599,8 @@ and NamespaceManager
         | Value (nsName, source) -> [(nsName, source)]
         | Null -> importedNS |> List.choose (containsSource >> function | Value v -> Some v | Null -> None)
 
-    /// Returns all namespaces declared in source files or referenced assemblies.
-    member this.AllNamespaces () = ImmutableArray.CreateRange Namespaces.Values
+    /// Returns the name of all namespaces declared in source files or referenced assemblies.
+    member this.NamespaceNames () = ImmutableArray.CreateRange (Namespaces.Values.Select (fun ns -> ns.Name))
 
     /// Given a qualifier for a symbol name, returns the corresponding namespace as Some
     /// if such a namespace or such a namespace short name within the given parent namespace and source file exists. 

@@ -762,10 +762,9 @@ namespace Microsoft.Quantum.QsCompiler.CompilationBuilder
             if (prefix.Length != 0 && !prefix.EndsWith("."))
                 prefix += ".";
             return
-                compilation.GlobalSymbols.AllNamespaces()
-                .Select(ns => ns.Name.Value)
-                .Where(name => name.StartsWith(prefix))
-                .Select(name => String.Concat(name.Substring(prefix.Length).TakeWhile(c => c != '.')))
+                compilation.GlobalSymbols.NamespaceNames()
+                .Where(name => name.Value.StartsWith(prefix))
+                .Select(name => String.Concat(name.Value.Substring(prefix.Length).TakeWhile(c => c != '.')))
                 .Distinct()
                 .Select(name => new CompletionItem() { Label = name, Kind = CompletionItemKind.Module });
         }

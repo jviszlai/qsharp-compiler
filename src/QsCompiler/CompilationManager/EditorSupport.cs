@@ -853,16 +853,15 @@ namespace Microsoft.Quantum.QsCompiler.CompilationBuilder
                         compilation.GlobalSymbols.TryGetCallable(
                             data.QualifiedName, data.QualifiedName.Namespace, NonNullable<string>.New(data.SourceFile))
                         .Item;
-                    return
-                        callable == null
-                        ? null
-                        : callable.PrintSignature() + callable.Documentation.PrintSummary(useMarkdown);
+                    var signature = callable.PrintSignature();
+                    var documentation = callable.Documentation.PrintSummary(useMarkdown);
+                    return callable == null ? null : signature.Trim() + "\n\n" + documentation.Trim();
                 case CompletionItemKind.Struct:
                     var type =
                         compilation.GlobalSymbols.TryGetType(
                             data.QualifiedName, data.QualifiedName.Namespace, NonNullable<string>.New(data.SourceFile))
                         .Item;
-                    return type?.Documentation.PrintSummary(useMarkdown);
+                    return type?.Documentation.PrintSummary(useMarkdown).Trim();
                 default:
                     return null;
             }
